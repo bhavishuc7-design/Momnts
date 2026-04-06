@@ -15,6 +15,5 @@ app.use("/api/auth", authRoutes)
 const PORT = process.env.PORT ?? 3000
 
 app.listen(PORT, () => {
-  console.log("DB URL:", process.env.DATABASE_URL);
   console.log(`Server running at http://localhost:${PORT}`)
 })
