@@ -81,7 +81,7 @@ async function loginUserController(req: Request, res: Response) {
 
     if (!user) {
       return res.status(400).json({
-        message: "User not found",
+        message: "Invalid email or password",
       });
     }
 
@@ -109,7 +109,8 @@ async function loginUserController(req: Request, res: Response) {
       },
     });
   } catch (error) {
-    res.send(500).json({ message: error.message });
+    const message = error instanceof Error ? error.message : "Internal server error";
+    return res.status(500).json({ message });
   }
 }
 

@@ -1,7 +1,7 @@
 const authConfig = {
     secret: process.env.JWT_SECRET as string,
 
-    secret_expries_in: process.env.AUTH_SECRET_EXPIRES_IN as string,
+    secret_expires_in: process.env.AUTH_SECRET_EXPIRES_IN as string,
 
     refresh_secret: process.env.AUTH_REFRESH_SECRET as string,
 

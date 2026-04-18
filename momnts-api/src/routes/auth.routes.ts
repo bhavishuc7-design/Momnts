@@ -25,10 +25,10 @@ authRouter.post("/login", loginUserController);
 
 /**
  * @route GET /api/auth/logout
- * @description
+ * @description Logout the current user and invalidate session
  * @access Public
  */
 
-authRouter.get("/logout", logoutUserController);
+authRouter.post("/logout", logoutUserController);
 
 export { authRouter };
