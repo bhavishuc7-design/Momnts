@@ -3,7 +3,10 @@ import {
   loginUserController,
   logoutUserController,
   registerUserController,
+  getMeController,
+  refreshUserController,
 } from "../controllers/auth.contoller";
+import { authenticate } from "../middleware/auth.middleware";
 
 const authRouter = Router();
 
@@ -24,11 +27,27 @@ authRouter.post("/register", registerUserController);
 authRouter.post("/login", loginUserController);
 
 /**
- * @route GET /api/auth/logout
- * @description Logout the current user and invalidate session
+ * @route POST /api/auth/refresh
+ * @description Refresh access token using refresh token
  * @access Public
  */
 
-authRouter.post("/logout", logoutUserController);
+authRouter.post("/refresh", refreshUserController);
+
+/**
+ * @route POST /api/auth/logout
+ * @description Logout the current user and invalidate session
+ * @access Private
+ */
+
+authRouter.post("/logout", authenticate, logoutUserController);
+
+/**
+ * @route GET /api/auth/me
+ * @description Get current logged in user details
+ * @access Private
+ */
+
+authRouter.get("/me", authenticate, getMeController);
 
 export { authRouter };

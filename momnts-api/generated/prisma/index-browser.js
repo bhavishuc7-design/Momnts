@@ -184,6 +184,14 @@ exports.Prisma.BlacklistScalarFieldEnum = {
   created_at: 'created_at'
 };
 
+exports.Prisma.RefreshTokenScalarFieldEnum = {
+  id: 'id',
+  token: 'token',
+  user_id: 'user_id',
+  expires_at: 'expires_at',
+  created_at: 'created_at'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -210,7 +218,8 @@ exports.Prisma.ModelName = {
   Photo: 'Photo',
   FaceProfile: 'FaceProfile',
   PhotoFace: 'PhotoFace',
-  Blacklist: 'Blacklist'
+  Blacklist: 'Blacklist',
+  RefreshToken: 'RefreshToken'
 };
 
 /**
