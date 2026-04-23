@@ -90,7 +90,7 @@ async function registerUserController(req: Request, res: Response) {
         email: user.email,
       },
     });
-  } catch (error) {
+  } catch (error:any) {
     res.status(500).json({ message: error.message });
   }
 }
