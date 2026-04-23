@@ -5,7 +5,7 @@ import {
   registerUserController,
   getMeController,
   refreshUserController,
-} from "../controllers/auth.contoller";
+} from "../controllers/auth.controller";
 import { authenticate } from "../middleware/auth.middleware";
 
 const authRouter = Router();
