@@ -106,7 +106,7 @@ model PhotoFace {
   bbox_h          Int
   confidence      Float
 
-  photo        Photo       @relation(fields: [photo_id], references: [id])
+  photo        Photo       @relation(fields: [photo_id], references: [id], onDelete: Cascade)
   face_profile FaceProfile @relation(fields: [face_profile_id], references: [id])
 }
 

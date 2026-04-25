@@ -5,6 +5,8 @@ import { uploadToR2, deleteFromR2, extractKeyFromUrl } from '../lib/r2.js'
 import { processImage } from '../lib/imageProcesser.js'
 import { photoQueue } from '../lib/queue.js'
 import crypto from 'crypto'
+import fs from 'fs'
+import sharp from 'sharp'
 
 /**
  * @name uploadPhotoController
@@ -46,92 +48,134 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
             return res.status(403).json({ message: 'You do not have access to this event' })
         }
 
-        // Enforce upload limit for attendees only
+        // Enforce upload limit for attendees only using atomic check-and-increment
         if (eventAccess.role === 'ATTENDEE') {
-            const remainingQuota = eventAccess.event.attendee_upload_limit - eventAccess.upload_count
-
-            if (remainingQuota <= 0) {
+            const limit = eventAccess.event.attendee_upload_limit
+            const userId = req.user.id
+            const result = await prisma.$transaction(async (tx: any) => {
+                const current = await tx.eventAccess.findUnique({
+                    where: {
+                        event_id_user_id: {
+                            event_id: eventId,
+                            user_id: userId,
+                        }
+                    },
+                    select: { upload_count: true }
+                })
+                if (!current) throw new Error('Event access not found')
+                if (current.upload_count + files.length > limit) {
+                    return { success: false, current: current.upload_count, limit }
+                }
+                await tx.eventAccess.update({
+                    where: {
+                        event_id_user_id: {
+                            event_id: eventId,
+                            user_id: userId,
+                        }
+                    },
+                    data: { upload_count: { increment: files.length } }
+                })
+                return { success: true, newCount: current.upload_count + files.length, limit }
+            })
+            if (!result.success) {
+                const remainingQuota = result.limit - result.current
                 return res.status(400).json({
-                    message: `Upload limit reached. You can upload a maximum of ${eventAccess.event.attendee_upload_limit} photos per event.`,
-                    upload_count: eventAccess.upload_count,
-                    limit: eventAccess.event.attendee_upload_limit,
+                    message: remainingQuota <= 0
+                        ? `Upload limit reached. You can upload a maximum of ${result.limit} photos per event.`
+                        : `You can only upload ${remainingQuota} more photo(s). You tried to upload ${files.length}.`,
+                    upload_count: result.current,
+                    limit: result.limit,
+                    remaining_quota: remainingQuota,
                 })
             }
+            // Store the new count for response
+            ;(eventAccess as any).newUploadCount = result.newCount
+        }
 
-            // If they try to upload more than their remaining quota, block it
-            if (files.length > remainingQuota) {
+        // Validate each file is a valid image using sharp (not just client-controlled mimetype)
+        for (const file of files) {
+            try {
+                await sharp(file.path).metadata()
+            } catch (error) {
+                // Clean up invalid file
+                try {
+                    if (fs.existsSync(file.path)) {
+                        fs.unlinkSync(file.path)
+                    }
+                } catch (cleanupError) {
+                    console.error(`Failed to delete invalid file ${file.path}:`, cleanupError)
+                }
                 return res.status(400).json({
-                    message: `You can only upload ${remainingQuota} more photo(s). You tried to upload ${files.length}.`,
-                    remaining_quota: remainingQuota,
+                    message: `Invalid image file: ${file.originalname}. Only JPEG, PNG, WebP and HEIC images are allowed.`,
                 })
             }
         }
 
         // Process and upload each file
         const uploadedPhotos = []
+        const processedFiles: string[] = []
 
-        for (const file of files) {
-            // Generate a unique base path for this photo's 3 versions in R2
-            // Using timestamp + random string ensures no collisions
-            const photoId = crypto.randomUUID()
-            const basePath = `events/${eventId}/${photoId}`
+        try {
+            for (const file of files) {
+                // Generate a unique base path for this photo's 3 versions in R2
+                // Using timestamp + random string ensures no collisions
+                const photoId = crypto.randomUUID()
+                const basePath = `events/${eventId}/${photoId}`
 
-            // Compress the uploaded image into 3 versions using sharp
-            const { thumb, display, original } = await processImage(file.buffer)
+                // Compress the uploaded image into 3 versions using sharp
+                // file.path is the temp file path from disk storage
+                const { thumb, display, original } = await processImage(file.path)
 
-            // Upload all 3 versions to R2 in parallel (faster than sequential)
-            // Promise.all waits for all 3 uploads to finish before continuing
-            const [thumbUrl, displayUrl, originalUrl] = await Promise.all([
-                uploadToR2(`${basePath}/thumb.jpg`, thumb, 'image/jpeg'),
-                uploadToR2(`${basePath}/display.jpg`, display, 'image/jpeg'),
-                uploadToR2(`${basePath}/original.webp`, original, 'image/webp'),
-            ])
+                // Upload all 3 versions to R2 in parallel (faster than sequential)
+                // Promise.all waits for all 3 uploads to finish before continuing
+                const [thumbUrl, displayUrl, originalUrl] = await Promise.all([
+                    uploadToR2(`${basePath}/thumb.jpg`, thumb, 'image/jpeg'),
+                    uploadToR2(`${basePath}/display.jpg`, display, 'image/jpeg'),
+                    uploadToR2(`${basePath}/original.webp`, original, 'image/webp'),
+                ])
 
-            // Save the photo record to the database
-            // processed: false means face detection hasn't run yet
-            const photo = await prisma.photo.create({
-                data: {
-                    id: photoId,
-                    event_id: eventId,
-                    user_id: req.user.id,
-                    thumb_url: thumbUrl,
-                    display_url: displayUrl,
-                    original_url: originalUrl,
-                    processed: false,
-                    is_visible: true,
-                }
-            })
-
-            // Add a job to the BullMQ queue for face detection
-            // The worker will pick this up and call the Python service
-            // We don't wait for this — it happens in the background
-            // TODO: uncomment when momnts-vision is ready
-            // await photoQueue.add('detect-faces', {
-            //     photoId: photo.id,      // worker needs this to update processed = true
-            //     eventId: eventId,       // worker needs this to scope face profiles
-            //     displayUrl: displayUrl, // worker downloads this to run face detection
-            // })
-
-            uploadedPhotos.push(photo)
-        }
-
-        // Increment upload_count atomically for attendees
-        // We do this AFTER all uploads succeed so count stays accurate
-        if (eventAccess.role === 'ATTENDEE') {
-            await prisma.eventAccess.update({
-                where: {
-                    event_id_user_id: {
+                // Save the photo record to the database
+                // processed: false means face detection hasn't run yet
+                const photo = await prisma.photo.create({
+                    data: {
+                        id: photoId,
                         event_id: eventId,
                         user_id: req.user.id,
+                        thumb_url: thumbUrl,
+                        display_url: displayUrl,
+                        original_url: originalUrl,
+                        processed: false,
+                        is_visible: true,
                     }
-                },
-                data: {
-                    // { increment: n } is Prisma's atomic increment
-                    // safer than read → add → write which can have race conditions
-                    upload_count: { increment: files.length }
+                })
+
+                // Add a job to the BullMQ queue for face detection
+                // The worker will pick this up and call the Python service
+                // We don't wait for this — it happens in the background
+                // TODO: uncomment when momnts-vision is ready
+                // await photoQueue.add('detect-faces', {
+                //     photoId: photo.id,      // worker needs this to update processed = true
+                //     eventId: eventId,       // worker needs this to scope face profiles
+                //     displayUrl: displayUrl, // worker downloads this to run face detection
+                // })
+
+                uploadedPhotos.push(photo)
+                processedFiles.push(file.path)
+            }
+        } finally {
+            // Clean up temp files regardless of success or error
+            for (const filePath of processedFiles) {
+                try {
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath)
+                    }
+                } catch (err) {
+                    // Log cleanup error but don't fail the request
+                    console.error(`Failed to delete temp file ${filePath}:`, err)
                 }
-            })
+            }
         }
+
 
         // Build response — include remaining quota for attendees
         const response: Record<string, unknown> = {
@@ -140,7 +184,7 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
         }
 
         if (eventAccess.role === 'ATTENDEE') {
-            const newCount = eventAccess.upload_count + files.length
+            const newCount = (eventAccess as any).newUploadCount
             response.quota = {
                 used: newCount,
                 limit: eventAccess.event.attendee_upload_limit,
@@ -268,7 +312,9 @@ export async function getPhotoDetailController(req: AuthRequest, res: Response) 
         if (!photo) {
             return res.status(404).json({ message: 'Photo not found' })
         }
-
+        if (photo.event_id !== eventId) {
+            return res.status(404).json({ message: 'Photo not found' })
+        }
         // Attendees can't see hidden photos
         if (eventAccess.role === 'ATTENDEE' && !photo.is_visible) {
             return res.status(404).json({ message: 'Photo not found' })
@@ -323,10 +369,17 @@ export async function deletePhotoController(req: AuthRequest, res: Response) {
             return res.status(404).json({ message: 'Photo not found' })
         }
 
+        if (photo.event_id !== eventId) {
+            return res.status(404).json({ message: 'Photo not found' })
+        }
+
         // Attendees can only delete their own photos
         if (eventAccess.role === 'ATTENDEE' && photo.user_id !== req.user.id) {
             return res.status(403).json({ message: 'You can only delete your own photos' })
         }
+
+        // Delete from DB — cascades to PhotoFace rows automatically
+        await prisma.photo.delete({ where: { id: photoId, event_id: eventId } })
 
         // Delete all 3 versions from R2
         // extractKeyFromUrl converts full URL → R2 key
@@ -336,9 +389,6 @@ export async function deletePhotoController(req: AuthRequest, res: Response) {
             deleteFromR2(extractKeyFromUrl(photo.display_url)),
             deleteFromR2(extractKeyFromUrl(photo.original_url)),
         ])
-
-        // Delete from DB — cascades to PhotoFace rows automatically
-        await prisma.photo.delete({ where: { id: photoId } })
 
         // Give the quota slot back to the attendee
         if (eventAccess.role === 'ATTENDEE') {

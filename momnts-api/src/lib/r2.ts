@@ -1,13 +1,33 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
+// Validate required environment variables at startup
+const requiredEnvVars = {
+  R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
+  R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+  R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
+  R2_PUBLIC_URL: process.env.R2_PUBLIC_URL,
+}
+
+const missingVars = Object.entries(requiredEnvVars)
+  .filter(([_, value]) => !value)
+  .map(([key]) => key)
+
+if (missingVars.length > 0) {
+  throw new Error(
+    `Missing required environment variables: ${missingVars.join(', ')}. ` +
+    'Please set these variables before starting the server.'
+  )
+}
+
 // S3Client works with R2 because Cloudflare R2 is S3-compatible
 // We just point it to Cloudflare's endpoint instead of AWS
 export const r2 = new S3Client({
   region: 'auto', // R2 doesn't use regions like AWS, 'auto' is always correct
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  endpoint: `https://${requiredEnvVars.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    accessKeyId: requiredEnvVars.R2_ACCESS_KEY_ID!,
+    secretAccessKey: requiredEnvVars.R2_SECRET_ACCESS_KEY!,
   },
 })
 
@@ -25,7 +45,7 @@ export async function uploadToR2(
 ): Promise<string> {
   // PutObjectCommand is the S3/R2 way of saying "upload this file"
   await r2.send(new PutObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!, // which bucket to upload to
+    Bucket: requiredEnvVars.R2_BUCKET_NAME!, // which bucket to upload to
     Key: key,                             // path inside the bucket
     Body: body,                           // the actual file bytes
     ContentType: contentType,             // tells browser how to handle the file
@@ -33,7 +53,7 @@ export async function uploadToR2(
 
   // R2_PUBLIC_URL is your r2.dev or custom domain URL
   // The full URL is just base URL + the key (file path)
-  return `${process.env.R2_PUBLIC_URL}/${key}`
+  return `${requiredEnvVars.R2_PUBLIC_URL}/${key}`
 }
 
 /**
@@ -42,7 +62,7 @@ export async function uploadToR2(
  */
 export async function deleteFromR2(key: string): Promise<void> {
   await r2.send(new DeleteObjectCommand({
-    Bucket: process.env.R2_BUCKET_NAME!,
+    Bucket: requiredEnvVars.R2_BUCKET_NAME!,
     Key: key,
   }))
 }
@@ -53,5 +73,5 @@ export async function deleteFromR2(key: string): Promise<void> {
  * e.g. "https://pub-xxx.r2.dev/events/abc/photo.jpg" → "events/abc/photo.jpg"
  */
 export function extractKeyFromUrl(url: string): string {
-  return url.replace(`${process.env.R2_PUBLIC_URL}/`, '')
+  return url.replace(`${requiredEnvVars.R2_PUBLIC_URL}/`, '')
 }

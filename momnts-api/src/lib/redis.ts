@@ -6,9 +6,13 @@ import Redis from 'ioredis'
 // workers pick them up and process them
 
 // ioredis is the Node.js client library to talk to Redis
+
 export const redis = new Redis(process.env.REDIS_URL!, {
   // If connection fails, retry 3 times before throwing
-  maxRetriesPerRequest: 3,
+  // maxRetriesPerRequest: 3,
+  
+  // BullMQ recommends null for shared producer/worker connections
+  maxRetriesPerRequest: null,
 })
 
 redis.on('connect', () => {

@@ -13,10 +13,10 @@ interface ProcessedPhoto {
   original: Buffer   // ~2.5MB — served on download
 }
 
-export async function processImage(inputBuffer: Buffer): Promise<ProcessedPhoto> {
-  // Create a sharp instance from the raw uploaded bytes
+export async function processImage(input: Buffer | string): Promise<ProcessedPhoto> {
+  // Create a sharp instance from the raw uploaded bytes or file path
   // We reuse the same input for all 3 versions
-  const image = sharp(inputBuffer)
+  const image = sharp(input).rotate()
 
   // thumb — small square crop, heavily compressed
   // Used in photo grid where many images load at once
