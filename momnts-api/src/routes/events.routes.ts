@@ -2,6 +2,8 @@ import { Router } from "express";
 import { 
     createEventController, 
     deleteEventController, 
+    generateUniqueInviteCode, 
+    getEventAttendeesController, 
     getEventDetailsController, 
     getEventsController, 
     getJoinedEventsController, 
@@ -27,11 +29,17 @@ eventsRouter.post("/join", authenticate, joinEventController);
 // Get event details
 eventsRouter.get("/:eventId", authenticate, getEventDetailsController);
 
-
 // Update event details
 eventsRouter.put("/:eventId", authenticate, updateEventDetailsController);
 
 // Delete event
 eventsRouter.delete("/:eventId", authenticate, deleteEventController)
+
+// Get event attendees
+eventsRouter.get("/:eventId/attendees", authenticate, getEventAttendeesController)
+
+// Regenerate invite code (organizer only — if code is compromised)
+eventsRouter.patch("/:eventId/regenerate-code", authenticate, generateUniqueInviteCode)
+
 
 export { eventsRouter };

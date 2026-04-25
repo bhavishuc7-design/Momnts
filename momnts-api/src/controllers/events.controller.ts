@@ -250,47 +250,35 @@ async function getJoinedEventsController(req: AuthRequest, res: Response) {
 async function updateEventDetailsController(req: AuthRequest, res: Response) {
     try {
         if (!req.user?.id) {
-            return res.status(401).json({ message: "User not authenticated" });
+            return res.status(401).json({ message: 'User not authenticated' })
         }
 
-        const eventId = req.params.eventId as string;
-
-        if (!eventId) {
-            return res.status(400).json({ message: "Event ID is required" });
-        }
+        const eventId = req.params.eventId as string
+        const { name, date, location, isActive } = req.body
 
         const event = await prisma.event.findFirst({
-            where: {
-                id: eventId,
-                user_id: req.user.id,
-            },
-        });
+            where: { id: eventId, user_id: req.user.id }
+        })
 
         if (!event) {
-            return res.status(404).json({ message: "Event not found" });
+            return res.status(404).json({ message: 'Event not found' })
         }
 
-        event.name = req.body.name ?? event.name;
-        event.date = req.body.date ?? event.date;
-        event.location = req.body.location ?? event.location;
-        event.is_active = req.body.isActive ?? event.is_active;
+        const updated = await prisma.event.update({
+            where: { id: eventId },
+            data: {
+                ...(name && { name }),
+                ...(date && { date: new Date(date) }),
+                ...(location && { location }),
+                ...(isActive !== undefined && { is_active: isActive }),
+            }
+        })
 
-        await prisma.event.update({
-            where: {
-                id: eventId,
-            },
-            data: event,
-        });
-
-        return res.status(200).json({
-            message: "Event updated successfully",
-            event: event,
-        });
-
+        return res.status(200).json({ message: 'Event updated successfully', event: updated })
 
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Internal server error";
-        return res.status(500).json({ message });
+        const message = error instanceof Error ? error.message : 'Internal server error'
+        return res.status(500).json({ message })
     }
 }
 
@@ -367,4 +355,60 @@ async function getEventsController(req: AuthRequest, res: Response) {
     }
 }
 
-export { createEventController, getEventDetailsController, updateEventDetailsController, getEventsController, deleteEventController, joinEventController, getJoinedEventsController };
+/**
+ * @name getEventAttendeesController
+ * @description Gets all attendees for a particular event
+ * @route GET /events/:eventId/attendees
+ * @access Private
+ */
+async function getEventAttendeesController(req: AuthRequest, res: Response) {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ message: 'User not authenticated' })
+        }
+
+        const eventId = req.params.eventId as string
+
+        // Only organizer can see attendee list
+        const access = await prisma.eventAccess.findUnique({
+            where: {
+                event_id_user_id: { event_id: eventId, user_id: req.user.id }
+            }
+        })
+
+        if (!access || access.role !== 'ORGANIZER') {
+            return res.status(403).json({ message: 'Only the organizer can view attendees' })
+        }
+
+        const attendees = await prisma.eventAccess.findMany({
+            where: { event_id: eventId, role: 'ATTENDEE' },
+            include: {
+                user: {
+                    select: { id: true, name: true, email: true, created_at: true }
+                }
+            },
+            orderBy: { joined_at: 'asc' }
+        })
+
+        return res.status(200).json({
+            message: 'Attendees retrieved successfully',
+            data: attendees
+        })
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Internal server error'
+        return res.status(500).json({ message })
+    }
+}
+
+export {
+    createEventController,
+    getEventDetailsController,
+    updateEventDetailsController,
+    getEventsController,
+    deleteEventController,
+    joinEventController,
+    getJoinedEventsController,
+    getEventAttendeesController,
+    generateUniqueInviteCode
+};
