@@ -6362,21 +6362,21 @@ export namespace Prisma {
     id: string | null
     event_id: string | null
     claimed_by: string | null
-    is_calimed: boolean | null
+    is_claimed: boolean | null
   }
 
   export type FaceProfileMaxAggregateOutputType = {
     id: string | null
     event_id: string | null
     claimed_by: string | null
-    is_calimed: boolean | null
+    is_claimed: boolean | null
   }
 
   export type FaceProfileCountAggregateOutputType = {
     id: number
     event_id: number
     claimed_by: number
-    is_calimed: number
+    is_claimed: number
     _all: number
   }
 
@@ -6385,21 +6385,21 @@ export namespace Prisma {
     id?: true
     event_id?: true
     claimed_by?: true
-    is_calimed?: true
+    is_claimed?: true
   }
 
   export type FaceProfileMaxAggregateInputType = {
     id?: true
     event_id?: true
     claimed_by?: true
-    is_calimed?: true
+    is_claimed?: true
   }
 
   export type FaceProfileCountAggregateInputType = {
     id?: true
     event_id?: true
     claimed_by?: true
-    is_calimed?: true
+    is_claimed?: true
     _all?: true
   }
 
@@ -6479,7 +6479,7 @@ export namespace Prisma {
     id: string
     event_id: string
     claimed_by: string | null
-    is_calimed: boolean
+    is_claimed: boolean
     _count: FaceProfileCountAggregateOutputType | null
     _min: FaceProfileMinAggregateOutputType | null
     _max: FaceProfileMaxAggregateOutputType | null
@@ -6503,7 +6503,7 @@ export namespace Prisma {
     id?: boolean
     event_id?: boolean
     claimed_by?: boolean
-    is_calimed?: boolean
+    is_claimed?: boolean
     event?: boolean | EventDefaultArgs<ExtArgs>
     claimed?: boolean | FaceProfile$claimedArgs<ExtArgs>
     photo_faces?: boolean | FaceProfile$photo_facesArgs<ExtArgs>
@@ -6515,7 +6515,7 @@ export namespace Prisma {
     id?: boolean
     event_id?: boolean
     claimed_by?: boolean
-    is_calimed?: boolean
+    is_claimed?: boolean
     event?: boolean | EventDefaultArgs<ExtArgs>
     claimed?: boolean | FaceProfile$claimedArgs<ExtArgs>
   }, ExtArgs["result"]["faceProfile"]>
@@ -6524,10 +6524,10 @@ export namespace Prisma {
     id?: boolean
     event_id?: boolean
     claimed_by?: boolean
-    is_calimed?: boolean
+    is_claimed?: boolean
   }
 
-  export type FaceProfileOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "event_id" | "claimed_by" | "is_calimed", ExtArgs["result"]["faceProfile"]>
+  export type FaceProfileOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "event_id" | "claimed_by" | "is_claimed", ExtArgs["result"]["faceProfile"]>
   export type FaceProfileInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     event?: boolean | EventDefaultArgs<ExtArgs>
     claimed?: boolean | FaceProfile$claimedArgs<ExtArgs>
@@ -6550,7 +6550,7 @@ export namespace Prisma {
       id: string
       event_id: string
       claimed_by: string | null
-      is_calimed: boolean
+      is_claimed: boolean
     }, ExtArgs["result"]["faceProfile"]>
     composites: {}
   }
@@ -6909,7 +6909,7 @@ export namespace Prisma {
     readonly id: FieldRef<"FaceProfile", 'String'>
     readonly event_id: FieldRef<"FaceProfile", 'String'>
     readonly claimed_by: FieldRef<"FaceProfile", 'String'>
-    readonly is_calimed: FieldRef<"FaceProfile", 'Boolean'>
+    readonly is_claimed: FieldRef<"FaceProfile", 'Boolean'>
   }
     
 
@@ -10565,7 +10565,7 @@ export namespace Prisma {
     id: 'id',
     event_id: 'event_id',
     claimed_by: 'claimed_by',
-    is_calimed: 'is_calimed'
+    is_claimed: 'is_claimed'
   };
 
   export type FaceProfileScalarFieldEnum = (typeof FaceProfileScalarFieldEnum)[keyof typeof FaceProfileScalarFieldEnum]
@@ -11012,7 +11012,7 @@ export namespace Prisma {
     id?: StringFilter<"FaceProfile"> | string
     event_id?: StringFilter<"FaceProfile"> | string
     claimed_by?: StringNullableFilter<"FaceProfile"> | string | null
-    is_calimed?: BoolFilter<"FaceProfile"> | boolean
+    is_claimed?: BoolFilter<"FaceProfile"> | boolean
     event?: XOR<EventScalarRelationFilter, EventWhereInput>
     claimed?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
     photo_faces?: PhotoFaceListRelationFilter
@@ -11022,7 +11022,7 @@ export namespace Prisma {
     id?: SortOrder
     event_id?: SortOrder
     claimed_by?: SortOrderInput | SortOrder
-    is_calimed?: SortOrder
+    is_claimed?: SortOrder
     event?: EventOrderByWithRelationInput
     claimed?: UserOrderByWithRelationInput
     photo_faces?: PhotoFaceOrderByRelationAggregateInput
@@ -11035,7 +11035,7 @@ export namespace Prisma {
     NOT?: FaceProfileWhereInput | FaceProfileWhereInput[]
     event_id?: StringFilter<"FaceProfile"> | string
     claimed_by?: StringNullableFilter<"FaceProfile"> | string | null
-    is_calimed?: BoolFilter<"FaceProfile"> | boolean
+    is_claimed?: BoolFilter<"FaceProfile"> | boolean
     event?: XOR<EventScalarRelationFilter, EventWhereInput>
     claimed?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
     photo_faces?: PhotoFaceListRelationFilter
@@ -11045,7 +11045,7 @@ export namespace Prisma {
     id?: SortOrder
     event_id?: SortOrder
     claimed_by?: SortOrderInput | SortOrder
-    is_calimed?: SortOrder
+    is_claimed?: SortOrder
     _count?: FaceProfileCountOrderByAggregateInput
     _max?: FaceProfileMaxOrderByAggregateInput
     _min?: FaceProfileMinOrderByAggregateInput
@@ -11058,7 +11058,7 @@ export namespace Prisma {
     id?: StringWithAggregatesFilter<"FaceProfile"> | string
     event_id?: StringWithAggregatesFilter<"FaceProfile"> | string
     claimed_by?: StringNullableWithAggregatesFilter<"FaceProfile"> | string | null
-    is_calimed?: BoolWithAggregatesFilter<"FaceProfile"> | boolean
+    is_claimed?: BoolWithAggregatesFilter<"FaceProfile"> | boolean
   }
 
   export type PhotoFaceWhereInput = {
@@ -11320,7 +11320,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     user: UserCreateNestedOneWithoutEventsInput
@@ -11336,7 +11336,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     event_access?: EventAccessUncheckedCreateNestedManyWithoutEventInput
@@ -11381,7 +11381,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
   }
@@ -11474,8 +11474,8 @@ export namespace Prisma {
     id?: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
     event: EventCreateNestedOneWithoutPhotosInput
     user: UserCreateNestedOneWithoutPhotosInput
     photo_faces?: PhotoFaceCreateNestedManyWithoutPhotoInput
@@ -11487,8 +11487,8 @@ export namespace Prisma {
     user_id: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
     photo_faces?: PhotoFaceUncheckedCreateNestedManyWithoutPhotoInput
   }
 
@@ -11520,8 +11520,8 @@ export namespace Prisma {
     user_id: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
   }
 
   export type PhotoUpdateManyMutationInput = {
@@ -11544,7 +11544,7 @@ export namespace Prisma {
 
   export type FaceProfileUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
     event?: EventUpdateOneRequiredWithoutFace_profilesNestedInput
     claimed?: UserUpdateOneWithoutClaimed_profilesNestedInput
     photo_faces?: PhotoFaceUpdateManyWithoutFace_profileNestedInput
@@ -11554,20 +11554,20 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     event_id?: StringFieldUpdateOperationsInput | string
     claimed_by?: NullableStringFieldUpdateOperationsInput | string | null
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
     photo_faces?: PhotoFaceUncheckedUpdateManyWithoutFace_profileNestedInput
   }
 
   export type FaceProfileUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
   }
 
   export type FaceProfileUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
     event_id?: StringFieldUpdateOperationsInput | string
     claimed_by?: NullableStringFieldUpdateOperationsInput | string | null
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
   }
 
   export type PhotoFaceCreateInput = {
@@ -12101,21 +12101,21 @@ export namespace Prisma {
     id?: SortOrder
     event_id?: SortOrder
     claimed_by?: SortOrder
-    is_calimed?: SortOrder
+    is_claimed?: SortOrder
   }
 
   export type FaceProfileMaxOrderByAggregateInput = {
     id?: SortOrder
     event_id?: SortOrder
     claimed_by?: SortOrder
-    is_calimed?: SortOrder
+    is_claimed?: SortOrder
   }
 
   export type FaceProfileMinOrderByAggregateInput = {
     id?: SortOrder
     event_id?: SortOrder
     claimed_by?: SortOrder
-    is_calimed?: SortOrder
+    is_claimed?: SortOrder
   }
 
   export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
@@ -12994,7 +12994,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     event_access?: EventAccessCreateNestedManyWithoutEventInput
@@ -13008,7 +13008,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     event_access?: EventAccessUncheckedCreateNestedManyWithoutEventInput
@@ -13056,8 +13056,8 @@ export namespace Prisma {
     id?: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
     event: EventCreateNestedOneWithoutPhotosInput
     photo_faces?: PhotoFaceCreateNestedManyWithoutPhotoInput
   }
@@ -13067,8 +13067,8 @@ export namespace Prisma {
     event_id: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
     photo_faces?: PhotoFaceUncheckedCreateNestedManyWithoutPhotoInput
   }
 
@@ -13211,7 +13211,7 @@ export namespace Prisma {
     id?: StringFilter<"FaceProfile"> | string
     event_id?: StringFilter<"FaceProfile"> | string
     claimed_by?: StringNullableFilter<"FaceProfile"> | string | null
-    is_calimed?: BoolFilter<"FaceProfile"> | boolean
+    is_claimed?: BoolFilter<"FaceProfile"> | boolean
   }
 
   export type RefreshTokenUpsertWithWhereUniqueWithoutUserInput = {
@@ -13300,8 +13300,8 @@ export namespace Prisma {
     id?: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
     user: UserCreateNestedOneWithoutPhotosInput
     photo_faces?: PhotoFaceCreateNestedManyWithoutPhotoInput
   }
@@ -13311,8 +13311,8 @@ export namespace Prisma {
     user_id: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
     photo_faces?: PhotoFaceUncheckedCreateNestedManyWithoutPhotoInput
   }
 
@@ -13409,7 +13409,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     user: UserCreateNestedOneWithoutEventsInput
@@ -13424,7 +13424,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     photos?: PhotoUncheckedCreateNestedManyWithoutEventInput
@@ -13545,7 +13545,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     user: UserCreateNestedOneWithoutEventsInput
@@ -13560,7 +13560,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     event_access?: EventAccessUncheckedCreateNestedManyWithoutEventInput
@@ -13741,7 +13741,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     user: UserCreateNestedOneWithoutEventsInput
@@ -13756,7 +13756,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
     event_access?: EventAccessUncheckedCreateNestedManyWithoutEventInput
@@ -13921,8 +13921,8 @@ export namespace Prisma {
     id?: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
     event: EventCreateNestedOneWithoutPhotosInput
     user: UserCreateNestedOneWithoutPhotosInput
   }
@@ -13933,8 +13933,8 @@ export namespace Prisma {
     user_id: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
   }
 
   export type PhotoCreateOrConnectWithoutPhoto_facesInput = {
@@ -13980,7 +13980,7 @@ export namespace Prisma {
 
   export type FaceProfileUpdateWithoutPhoto_facesInput = {
     id?: StringFieldUpdateOperationsInput | string
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
     event?: EventUpdateOneRequiredWithoutFace_profilesNestedInput
     claimed?: UserUpdateOneWithoutClaimed_profilesNestedInput
   }
@@ -13989,7 +13989,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     event_id?: StringFieldUpdateOperationsInput | string
     claimed_by?: NullableStringFieldUpdateOperationsInput | string | null
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
   }
 
   export type UserCreateWithoutRefreshTokensInput = {
@@ -14062,7 +14062,7 @@ export namespace Prisma {
     location: string
     date: Date | string
     invite_code: string
-    is_active: boolean
+    is_active?: boolean
     attendee_upload_limit?: number
     created_at?: Date | string
   }
@@ -14080,8 +14080,8 @@ export namespace Prisma {
     event_id: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
   }
 
   export type RefreshTokenCreateManyUserInput = {
@@ -14185,7 +14185,7 @@ export namespace Prisma {
 
   export type FaceProfileUpdateWithoutClaimedInput = {
     id?: StringFieldUpdateOperationsInput | string
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
     event?: EventUpdateOneRequiredWithoutFace_profilesNestedInput
     photo_faces?: PhotoFaceUpdateManyWithoutFace_profileNestedInput
   }
@@ -14193,14 +14193,14 @@ export namespace Prisma {
   export type FaceProfileUncheckedUpdateWithoutClaimedInput = {
     id?: StringFieldUpdateOperationsInput | string
     event_id?: StringFieldUpdateOperationsInput | string
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
     photo_faces?: PhotoFaceUncheckedUpdateManyWithoutFace_profileNestedInput
   }
 
   export type FaceProfileUncheckedUpdateManyWithoutClaimedInput = {
     id?: StringFieldUpdateOperationsInput | string
     event_id?: StringFieldUpdateOperationsInput | string
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
   }
 
   export type RefreshTokenUpdateWithoutUserInput = {
@@ -14237,8 +14237,8 @@ export namespace Prisma {
     user_id: string
     storage_url: string
     uploaded_at?: Date | string
-    processed: boolean
-    is_visible: boolean
+    processed?: boolean
+    is_visible?: boolean
   }
 
   export type EventAccessUpdateWithoutEventInput = {
@@ -14296,7 +14296,7 @@ export namespace Prisma {
 
   export type FaceProfileUpdateWithoutEventInput = {
     id?: StringFieldUpdateOperationsInput | string
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
     claimed?: UserUpdateOneWithoutClaimed_profilesNestedInput
     photo_faces?: PhotoFaceUpdateManyWithoutFace_profileNestedInput
   }
@@ -14304,14 +14304,14 @@ export namespace Prisma {
   export type FaceProfileUncheckedUpdateWithoutEventInput = {
     id?: StringFieldUpdateOperationsInput | string
     claimed_by?: NullableStringFieldUpdateOperationsInput | string | null
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
     photo_faces?: PhotoFaceUncheckedUpdateManyWithoutFace_profileNestedInput
   }
 
   export type FaceProfileUncheckedUpdateManyWithoutEventInput = {
     id?: StringFieldUpdateOperationsInput | string
     claimed_by?: NullableStringFieldUpdateOperationsInput | string | null
-    is_calimed?: BoolFieldUpdateOperationsInput | boolean
+    is_claimed?: BoolFieldUpdateOperationsInput | boolean
   }
 
   export type PhotoFaceCreateManyPhotoInput = {

@@ -1,12 +1,31 @@
 import type { Response } from "express";
 import { prisma } from "../lib/prisma";
 import type { AuthRequest } from "../middleware/auth.middleware";
+import crypto from 'crypto'
 
 /**
  * @name createEventController
  * @description Creates a new event with a random invite code
  * @access Public
  */
+
+async function generateUniqueInviteCode(): Promise<string> {
+    const MAX_ATTEMPTS = 10;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+
+        const code = crypto.randomBytes(3).toString('hex').toUpperCase()
+
+        const existing = await prisma.event.findUnique({
+            where: { invite_code: code }
+        })
+
+        if (!existing) return code
+    }
+
+    throw new Error("Failed to generate unique invite code after maximum attempts");
+}
+
+
 async function createEventController(req: AuthRequest, res: Response) {
     try {
         const { name, date, location } = req.body;
@@ -17,7 +36,7 @@ async function createEventController(req: AuthRequest, res: Response) {
             });
         }
 
-        const eventCode = Math.random().toString(36).substring(2, 8);
+        const invite_code = await generateUniqueInviteCode();
 
         const eventDate = new Date(date);
         if (isNaN(eventDate.getTime())) {
@@ -33,15 +52,22 @@ async function createEventController(req: AuthRequest, res: Response) {
                 name: name,
                 date: eventDate,
                 location: location,
-                invite_code: eventCode,
-                is_active: true,
+                invite_code: invite_code,
                 user_id: req.user.id,
             },
         });
+        const eventAccess = await prisma.eventAccess.create({
+            data: {
+                event_id: event.id,
+                role: "ORGANIZER",
+                user_id: req.user.id
+            }
+        })
 
         return res.status(201).json({
             message: "Event created successfully",
             event: event,
+            eventAccess: eventAccess
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : "Internal server error";
@@ -67,21 +93,148 @@ async function getEventDetailsController(req: AuthRequest, res: Response) {
             return res.status(400).json({ message: "Event ID is required" });
         }
 
-        const event = await prisma.event.findFirst({
+        // Check user has access to this event (creator or attendee)
+        const eventAccess = await prisma.eventAccess.findUnique({
             where: {
-                id: eventId,
-                user_id: req.user.id,
-            },
-        });
+                event_id_user_id: {
+                    event_id: eventId,
+                    user_id: req.user.id,
+                }
+            }
+        })
 
-        if (!event) {
-            return res.status(404).json({ message: "Event not found" });
+        if (!eventAccess) {
+            return res.status(403).json({ message: 'You do not have access to this event' })
         }
 
+        const event = await prisma.event.findUnique({
+            where: { id: eventId },
+            include: {
+                _count: {
+                    select: {
+                        photos: true,
+                        event_access: true,
+                    }
+                }
+            }
+        })
+        if (!event) {
+            return res.status(404).json({ message: "Event not found" })
+        }
         return res.status(200).json({
-            message: "Event retrieved successfully",
-            event: event,
-        });
+            event: {
+                ...event,
+                user_role: eventAccess.role
+            }
+        })
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Internal server error";
+        return res.status(500).json({ message });
+    }
+}
+
+/**
+ * @name joinEventController
+ * @description Joins an event
+ * @route POST /events/:eventId/join
+ * @access Private
+ */
+
+async function joinEventController(req: AuthRequest, res: Response) {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ message: 'User not authenticated' })
+        }
+
+        const { inviteCode } = req.body
+
+        if (!inviteCode) {
+            return res.status(400).json({ message: 'Invite code is required' })
+        }
+
+        // Find event by invite code
+        const event = await prisma.event.findUnique({
+            where: { invite_code: inviteCode }
+        })
+
+        if (!event) {
+            return res.status(404).json({ message: 'Invalid invite code' })
+        }
+
+        // Check event is still active
+        if (!event.is_active) {
+            return res.status(400).json({ message: 'This event is no longer active' })
+        }
+
+        // Organizer can't join their own event
+        if (event.user_id === req.user.id) {
+            return res.status(400).json({ message: 'You are the organizer of this event' })
+        }
+
+        // Check if already a member
+        const existing = await prisma.eventAccess.findUnique({
+            where: {
+                event_id_user_id: {
+                    event_id: event.id,
+                    user_id: req.user.id,
+                }
+            }
+        })
+
+        if (existing) {
+            return res.status(400).json({ message: 'You are already a member of this event' })
+        }
+
+        const eventAccess = await prisma.eventAccess.create({
+            data: {
+                event_id: event.id,
+                user_id: req.user.id,
+                role: 'ATTENDEE',
+            }
+        })
+
+        return res.status(201).json({
+            message: 'Joined event successfully',
+            data: {
+                event: {
+                    id: event.id,
+                    name: event.name,
+                    location: event.location,
+                    date: event.date,
+                },
+                role: eventAccess.role,
+            }
+        })
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Internal server error'
+        return res.status(500).json({ message })
+    }
+}
+
+/**
+ * @name getJoinedEventsController
+ * @description Gets all events joined by the user.
+ * @route GET /events/joined
+ * @access Private
+ */
+async function getJoinedEventsController(req: AuthRequest, res: Response) {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const events = await prisma.eventAccess.findMany({
+            where: {
+                user_id: req.user?.id,
+                role: "ATTENDEE"
+            },
+            include: {
+                event: true
+            }
+        })
+        return res.status(200).json({ message: "Events fetched successfully", data: events })
     } catch (error) {
         const message = error instanceof Error ? error.message : "Internal server error";
         return res.status(500).json({ message });
@@ -94,8 +247,8 @@ async function getEventDetailsController(req: AuthRequest, res: Response) {
  * @route PUT /events/:eventId
  * @access Private
  */
-async function updateEventDetailsController(req:AuthRequest, res:Response){
-    try{
+async function updateEventDetailsController(req: AuthRequest, res: Response) {
+    try {
         if (!req.user?.id) {
             return res.status(401).json({ message: "User not authenticated" });
         }
@@ -117,9 +270,10 @@ async function updateEventDetailsController(req:AuthRequest, res:Response){
             return res.status(404).json({ message: "Event not found" });
         }
 
-        event.name = req.body.name || event.name;
-        event.date = req.body.date || event.date;
-        event.location = req.body.location || event.location;
+        event.name = req.body.name ?? event.name;
+        event.date = req.body.date ?? event.date;
+        event.location = req.body.location ?? event.location;
+        event.is_active = req.body.isActive ?? event.is_active;
 
         await prisma.event.update({
             where: {
@@ -134,7 +288,7 @@ async function updateEventDetailsController(req:AuthRequest, res:Response){
         });
 
 
-    }catch (error) {
+    } catch (error) {
         const message = error instanceof Error ? error.message : "Internal server error";
         return res.status(500).json({ message });
     }
@@ -146,8 +300,8 @@ async function updateEventDetailsController(req:AuthRequest, res:Response){
  * @route DELETE /events/:eventId
  * @access Private
  */
-async function deleteEventController(req:AuthRequest, res:Response){
-    try{
+async function deleteEventController(req: AuthRequest, res: Response) {
+    try {
         if (!req.user?.id) {
             return res.status(401).json({ message: "User not authenticated" });
         }
@@ -180,7 +334,7 @@ async function deleteEventController(req:AuthRequest, res:Response){
         });
 
 
-    }catch (error) {
+    } catch (error) {
         const message = error instanceof Error ? error.message : "Internal server error";
         return res.status(500).json({ message });
     }
@@ -213,4 +367,4 @@ async function getEventsController(req: AuthRequest, res: Response) {
     }
 }
 
-export { createEventController, getEventDetailsController, updateEventDetailsController, getEventsController, deleteEventController };
+export { createEventController, getEventDetailsController, updateEventDetailsController, getEventsController, deleteEventController, joinEventController, getJoinedEventsController };
