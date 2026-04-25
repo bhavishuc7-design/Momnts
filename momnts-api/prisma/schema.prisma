@@ -67,13 +67,15 @@ model EventAccess {
 }
 
 model Photo {
-  id          String   @id @default(uuid())
-  event_id    String
-  user_id     String
-  storage_url String   @unique
-  uploaded_at DateTime @default(now())
-  processed   Boolean  @default(false)
-  is_visible  Boolean  @default(true)
+  id           String   @id @default(uuid())
+  event_id     String
+  user_id      String
+  uploaded_at  DateTime @default(now())
+  processed    Boolean  @default(false)
+  is_visible   Boolean  @default(true)
+  original_url String
+  display_url  String
+  thumb_url    String
 
   event Event @relation(fields: [event_id], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -104,7 +106,7 @@ model PhotoFace {
   bbox_h          Int
   confidence      Float
 
-  photo        Photo       @relation(fields: [photo_id], references: [id])
+  photo        Photo       @relation(fields: [photo_id], references: [id], onDelete: Cascade)
   face_profile FaceProfile @relation(fields: [face_profile_id], references: [id])
 }
 
