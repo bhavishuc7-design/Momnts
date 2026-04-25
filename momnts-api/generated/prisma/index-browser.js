@@ -163,7 +163,7 @@ exports.Prisma.FaceProfileScalarFieldEnum = {
   id: 'id',
   event_id: 'event_id',
   claimed_by: 'claimed_by',
-  is_calimed: 'is_calimed'
+  is_claimed: 'is_claimed'
 };
 
 exports.Prisma.PhotoFaceScalarFieldEnum = {

@@ -36,7 +36,7 @@ model Event {
   location              String
   date                  DateTime
   invite_code           String   @unique
-  is_active             Boolean
+  is_active             Boolean  @default(true)
   attendee_upload_limit Int      @default(10)
   created_at            DateTime @default(now())
 
@@ -72,8 +72,8 @@ model Photo {
   user_id     String
   storage_url String   @unique
   uploaded_at DateTime @default(now())
-  processed   Boolean
-  is_visible  Boolean
+  processed   Boolean  @default(false)
+  is_visible  Boolean  @default(true)
 
   event Event @relation(fields: [event_id], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -86,7 +86,7 @@ model FaceProfile {
   event_id         String
   embedding_vector Unsupported("vector")
   claimed_by       String?
-  is_calimed       Boolean
+  is_claimed       Boolean               @default(false)
 
   event   Event @relation(fields: [event_id], references: [id], onDelete: Cascade)
   claimed User? @relation("UserClaimedProfiles", fields: [claimed_by], references: [id])
