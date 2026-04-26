@@ -48,49 +48,55 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
             return res.status(403).json({ message: 'You do not have access to this event' })
         }
 
-        // Enforce upload limit for attendees only using atomic check-and-increment
-        if (eventAccess.role === 'ATTENDEE') {
-            const limit = eventAccess.event.attendee_upload_limit
-            const userId = req.user.id
-            const result = await prisma.$transaction(async (tx: any) => {
-                const current = await tx.eventAccess.findUnique({
-                    where: {
-                        event_id_user_id: {
-                            event_id: eventId,
-                            user_id: userId,
-                        }
-                    },
-                    select: { upload_count: true }
-                })
-                if (!current) throw new Error('Event access not found')
-                if (current.upload_count + files.length > limit) {
-                    return { success: false, current: current.upload_count, limit }
-                }
-                await tx.eventAccess.update({
-                    where: {
-                        event_id_user_id: {
-                            event_id: eventId,
-                            user_id: userId,
-                        }
-                    },
-                    data: { upload_count: { increment: files.length } }
-                })
-                return { success: true, newCount: current.upload_count + files.length, limit }
+        // Enforce upload limit for attendees and track upload count for all users
+        const userId = req.user.id
+        const result = await prisma.$transaction(async (tx: any) => {
+            const current = await tx.eventAccess.findUnique({
+                where: {
+                    event_id_user_id: {
+                        event_id: eventId,
+                        user_id: userId,
+                    }
+                },
+                select: { upload_count: true, role: true }
             })
-            if (!result.success) {
-                const remainingQuota = result.limit - result.current
-                return res.status(400).json({
-                    message: remainingQuota <= 0
-                        ? `Upload limit reached. You can upload a maximum of ${result.limit} photos per event.`
-                        : `You can only upload ${remainingQuota} more photo(s). You tried to upload ${files.length}.`,
-                    upload_count: result.current,
-                    limit: result.limit,
-                    remaining_quota: remainingQuota,
-                })
+            if (!current) throw new Error('Event access not found')
+
+            // Enforce limit for attendees only
+            if (current.role === 'ATTENDEE') {
+                const limit = eventAccess.event.attendee_upload_limit
+                if (current.upload_count + files.length > limit) {
+                    return { success: false, current: current.upload_count, limit, role: current.role }
+                }
             }
-            // Store the new count for response
-            ;(eventAccess as any).newUploadCount = result.newCount
+
+            await tx.eventAccess.update({
+                where: {
+                    event_id_user_id: {
+                        event_id: eventId,
+                        user_id: userId,
+                    }
+                },
+                data: { upload_count: { increment: files.length } }
+            })
+            return { success: true, newCount: current.upload_count + files.length, role: current.role }
+        })
+
+        if (!result.success) {
+            const remainingQuota = result.limit! - result.current
+            return res.status(400).json({
+                message: remainingQuota <= 0
+                    ? `Upload limit reached. You can upload a maximum of ${result.limit} photos per event.`
+                    : `You can only upload ${remainingQuota} more photo(s). You tried to upload ${files.length}.`,
+                upload_count: result.current,
+                limit: result.limit,
+                remaining_quota: remainingQuota,
+            })
         }
+
+        // Store the new count for response
+        ;(eventAccess as any).newUploadCount = result.newCount
+        ;(eventAccess as any).role = result.role
 
         // Validate each file is a valid image using sharp (not just client-controlled mimetype)
         for (const file of files) {
@@ -177,18 +183,25 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
         }
 
 
-        // Build response — include remaining quota for attendees
+        // Build response — include upload count for all users
+        const newCount = (eventAccess as any).newUploadCount
+        const userRole = (eventAccess as any).role
         const response: Record<string, unknown> = {
             message: `${uploadedPhotos.length} photo(s) uploaded successfully. Face detection is running in the background.`,
             photos: uploadedPhotos,
         }
 
-        if (eventAccess.role === 'ATTENDEE') {
-            const newCount = (eventAccess as any).newUploadCount
+        if (userRole === 'ATTENDEE') {
             response.quota = {
                 used: newCount,
                 limit: eventAccess.event.attendee_upload_limit,
                 remaining: eventAccess.event.attendee_upload_limit - newCount,
+            }
+        } else {
+            response.quota = {
+                used: newCount,
+                limit: null, // Organizers have no limit
+                remaining: null,
             }
         }
 
@@ -390,13 +403,22 @@ export async function deletePhotoController(req: AuthRequest, res: Response) {
             deleteFromR2(extractKeyFromUrl(photo.original_url)),
         ])
 
-        // Give the quota slot back to the attendee
-        if (eventAccess.role === 'ATTENDEE') {
+        // Decrement upload count for the photo uploader (organizers and attendees)
+        const uploaderAccess = await prisma.eventAccess.findUnique({
+            where: {
+                event_id_user_id: {
+                    event_id: eventId,
+                    user_id: photo.user_id,
+                }
+            }
+        })
+
+        if (uploaderAccess) {
             await prisma.eventAccess.update({
                 where: {
                     event_id_user_id: {
                         event_id: eventId,
-                        user_id: req.user.id,
+                        user_id: photo.user_id,
                     }
                 },
                 data: {
