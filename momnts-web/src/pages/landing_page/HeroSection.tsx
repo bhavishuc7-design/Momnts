@@ -2,7 +2,7 @@ const HeroSection = () => {
   return (
     <>
       <div className="h-screen flex items-center justify-center p-4">
-        <div className="w-full h-full bg-[url('/heroImage.jpg')] object-cover object-center rounded-2xl flex items-center justify-center flex-col relative overflow-hidden">
+        <div className="w-full h-full bg-[url('/heroImage.jpg')] bg-cover bg-center rounded-2xl flex items-center justify-center flex-col relative overflow-hidden">
           <h1 className="text-9xl font-melodrama text-white">
             Every photo. Only yours.
           </h1>
