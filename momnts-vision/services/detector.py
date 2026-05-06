@@ -5,6 +5,7 @@ from models.schemas import DetectedFace, BoundingBox
 from typing import List
 import tempfile
 import os
+from urllib.parse import urlparse
 
 # The model we use for generating face embeddings
 # ArcFace is more accurate than the default VGG-Face
@@ -16,17 +17,29 @@ DETECTOR_BACKEND = "retinaface"
 ALLOWED_DOMAINS = [
     "r2.cloudflarestorage.com",
     "r2.dev",
-    "pub-",  
 ]
 
 def validate_url(url: str) -> bool:
     """
     Validates that the URL is from an allowed domain.
     """
-    for domain in ALLOWED_DOMAINS:
-        if domain in url:
+    try:
+        hostname = urlparse(url).hostname
+        if not hostname:
+            return False
+        # Allow exact match or proper subdomain suffix
+        for domain in ALLOWED_DOMAINS:
+            if hostname == domain or hostname.endswith("." + domain):
+                return True
+        # Allow pub- prefixed R2 dev domains
+        if hostname.startswith("pub-") and hostname.endswith(".r2.dev"):
             return True
-    return False
+        return False
+    except Exception:
+        return False
+
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+
 
 def download_image(url: str) -> str:
     """
@@ -34,7 +47,7 @@ def download_image(url: str) -> str:
     DeepFace works with file paths, not raw bytes.
     Returns the temp file path.
     """
-    response = requests.get(url, timeout=30)
+    response = requests.get(url, timeout=30, stream=True)
     response.raise_for_status()
 
     # Create a temp file with the right extension
@@ -44,11 +57,26 @@ def download_image(url: str) -> str:
     elif "png" in url:
         suffix = ".png"
 
-    # NamedTemporaryFile creates a file that auto-deletes when closed
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    tmp.write(response.content)
-    tmp.close()
-    return tmp.name
+    try:
+        total_size = 0
+        for chunk in response.iter_content(chunk_size=8192):
+            if chunk:
+                total_size += len(chunk)
+                if total_size > MAX_IMAGE_SIZE:
+                    tmp.close()
+                    os.remove(tmp.name)
+                    response.close()
+                    raise ValueError(f"Image exceeds maximum size of {MAX_IMAGE_SIZE} bytes")
+                tmp.write(chunk)
+        tmp.close()
+        return tmp.name
+    except Exception:
+        tmp.close()
+        if os.path.exists(tmp.name):
+            os.remove(tmp.name)
+        response.close()
+        raise
 
 def detect_faces(image_url: str) -> List[DetectedFace]:
     """

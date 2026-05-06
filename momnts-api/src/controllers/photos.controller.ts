@@ -158,12 +158,12 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
                 // Add a job to the BullMQ queue for face detection
                 // The worker will pick this up and call the Python service
                 // We don't wait for this — it happens in the background
-                // TODO: uncomment when momnts-vision is ready
-                // await photoQueue.add('detect-faces', {
-                //     photoId: photo.id,      // worker needs this to update processed = true
-                //     eventId: eventId,       // worker needs this to scope face profiles
-                //     displayUrl: displayUrl, // worker downloads this to run face detection
-                // })
+
+                await photoQueue.add('detect-faces', {
+                    photoId: photo.id,      // worker needs this to update processed = true
+                    eventId: eventId,       // worker needs this to scope face profiles
+                    displayUrl: displayUrl, // worker downloads this to run face detection
+                })
 
                 uploadedPhotos.push(photo)
                 processedFiles.push(file.path)

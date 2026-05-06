@@ -1,4 +1,6 @@
+import logging
 from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing import List
 from services.detector import embed_selfie
@@ -25,10 +27,11 @@ async def match(req: MatchRequest):
     """
     try:
         # Generate embedding for the selfie
-        selfie_embedding = embed_selfie(req.selfie_url)
+        selfie_embedding = await run_in_threadpool(embed_selfie, req.selfie_url)
 
         # Find the best match among event's face profiles
-        result = find_best_match(
+        result = await run_in_threadpool(
+            find_best_match,
             selfie_embedding,
             [c.dict() for c in req.candidates]
         )
@@ -40,5 +43,6 @@ async def match(req: MatchRequest):
     except ValueError as e:
         # ValueError means no face detected in selfie
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logging.exception("Error in match endpoint")
+        raise HTTPException(status_code=500, detail="Internal server error")

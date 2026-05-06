@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 from typing import List, Optional
 from models.schemas import MatchResult
@@ -44,11 +45,27 @@ def find_best_match(
     """
     best_match = None
     best_similarity = -1.0
+    query_len = len(query_embedding)
 
     for candidate in candidates:
+        # Validate candidate has embedding_vector
+        embedding_vector = candidate.get("embedding_vector")
+        if embedding_vector is None:
+            logging.warning(f"Skipping candidate without embedding_vector: {candidate.get('face_profile_id', 'unknown')}")
+            continue
+
+        # Validate embedding_vector is a sequence with matching dimensionality
+        if not isinstance(embedding_vector, (list, tuple, np.ndarray)):
+            logging.warning(f"Skipping candidate with invalid embedding type: {candidate.get('face_profile_id', 'unknown')}")
+            continue
+
+        if len(embedding_vector) != query_len:
+            logging.warning(f"Skipping candidate with mismatched embedding dimensions: {candidate.get('face_profile_id', 'unknown')}")
+            continue
+
         similarity = cosine_similarity(
             query_embedding,
-            candidate["embedding_vector"]
+            embedding_vector
         )
 
         # Keep track of the highest similarity we've seen
