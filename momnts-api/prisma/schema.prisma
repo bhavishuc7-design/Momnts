@@ -15,12 +15,12 @@ datasource db {
 }
 
 model User {
-  id               String                 @id @default(uuid())
+  id               String                      @id @default(uuid())
   name             String
-  email            String                 @unique
+  email            String                      @unique
   password_hash    String
-  selfie_embedding Unsupported("vector")?
-  created_at       DateTime               @default(now())
+  selfie_embedding Unsupported("vector(512)")?
+  created_at       DateTime                    @default(now())
 
   events           Event[]
   event_access     EventAccess[]
@@ -84,11 +84,12 @@ model Photo {
 }
 
 model FaceProfile {
-  id               String                @id @default(uuid())
+  id               String                     @id @default(uuid())
   event_id         String
-  embedding_vector Unsupported("vector")
+  embedding_vector Unsupported("vector(512)")
   claimed_by       String?
-  is_claimed       Boolean               @default(false)
+  is_claimed       Boolean                    @default(false)
+  created_at       DateTime                   @default(now())
 
   event   Event @relation(fields: [event_id], references: [id], onDelete: Cascade)
   claimed User? @relation("UserClaimedProfiles", fields: [claimed_by], references: [id])
@@ -97,17 +98,17 @@ model FaceProfile {
 }
 
 model PhotoFace {
-  id              String @id @default(uuid())
+  id              String  @id @default(uuid())
   photo_id        String
-  face_profile_id String
+  face_profile_id String?
   bbox_x          Int
   bbox_y          Int
   bbox_w          Int
   bbox_h          Int
   confidence      Float
 
-  photo        Photo       @relation(fields: [photo_id], references: [id], onDelete: Cascade)
-  face_profile FaceProfile @relation(fields: [face_profile_id], references: [id])
+  photo        Photo        @relation(fields: [photo_id], references: [id], onDelete: Cascade)
+  face_profile FaceProfile? @relation(fields: [face_profile_id], references: [id])
 }
 
 model Blacklist {
