@@ -345,9 +345,15 @@ async function getEventsController(req: AuthRequest, res: Response) {
             },
         });
 
+        // Add user_role as ORGANIZER since these are the user's own events
+        const eventsWithRole = events.map(event => ({
+            ...event,
+            user_role: "ORGANIZER"
+        }));
+
         return res.status(200).json({
             message: "Events retrieved successfully",
-            events: events,
+            events: eventsWithRole,
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : "Internal server error";
