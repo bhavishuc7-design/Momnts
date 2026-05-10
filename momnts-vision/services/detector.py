@@ -89,20 +89,36 @@ def detect_faces(image_url: str) -> List[DetectedFace]:
         if not validate_url(image_url):
             raise ValueError("Image URL is not from an allowed domain")
         tmp_path = download_image(image_url)
+        print(f"[DETECT] Image downloaded to: {tmp_path}")
 
-        # DeepFace.represent() does two things at once:
-        # 1. Detects all faces in the image (finds bounding boxes)
-        # 2. Generates an embedding vector for each detected face
-        # enforce_detection=False means it won't throw if no faces found
-        results = DeepFace.represent(
-            img_path=tmp_path,
-            model_name=EMBEDDING_MODEL,
-            detector_backend=DETECTOR_BACKEND,
-            enforce_detection=False,
-        )
+        # Try multiple detector backends in sequence
+        # Some detectors work better for different image types
+        detector_backends = ["retinaface", "mtcnn", "opencv", "ssd"]
+        results = None
+        
+        for detector in detector_backends:
+            try:
+                print(f"[DETECT] Trying detector: {detector}")
+                results = DeepFace.represent(
+                    img_path=tmp_path,
+                    model_name=EMBEDDING_MODEL,
+                    detector_backend=detector,
+                    enforce_detection=False,
+                )
+                print(f"[DETECT] Detector {detector} returned {len(results) if results else 0} raw results")
+                if results and len(results) > 0:
+                    print(f"[DETECT] Successfully got results with {detector}")
+                    break
+            except Exception as e:
+                print(f"[DETECT] Detector {detector} failed: {str(e)}")
+                continue
+        
+        if not results:
+            print(f"[DETECT] All detectors failed or returned no results")
+            return []
 
         faces = []
-        for result in results:
+        for idx, result in enumerate(results):
             # DeepFace returns facial_area with the bounding box coordinates
             facial_area = result.get("facial_area", {})
 
@@ -117,10 +133,25 @@ def detect_faces(image_url: str) -> List[DetectedFace]:
             embedding = result.get("embedding", [])
 
             # face_confidence is how sure DeepFace is that this is a real face
-            confidence = result.get("face_confidence", 1.0)
+            confidence = result.get("face_confidence", 0.0)
+            print(f"[DETECT] Face {idx}: confidence={confidence:.3f}, bbox={bbox}, embedding_len={len(embedding)}")
 
-            # Skip very low confidence detections — likely not a real face
-            if confidence < 0.5:
+            # Skip faces without valid data
+            # Note: Some detectors (RetinaFace) return 0.0 confidence for valid faces
+            # So we rely on having valid bounding box and embedding data
+            has_valid_bbox = bbox.w > 0 and bbox.h > 0
+            has_embedding = len(embedding) > 0
+
+            # Only reject if confidence is > 0 but below threshold
+            MIN_CONFIDENCE = 0.15
+            if confidence > 0 and confidence < MIN_CONFIDENCE:
+                print(f"[DETECT] Face {idx}: Skipping - confidence {confidence} below threshold {MIN_CONFIDENCE}")
+                continue
+            if not has_embedding:
+                print(f"[DETECT] Face {idx}: Skipping - no embedding data")
+                continue
+            if not has_valid_bbox:
+                print(f"[DETECT] Face {idx}: Skipping - invalid bounding box")
                 continue
 
             faces.append(DetectedFace(
@@ -129,6 +160,7 @@ def detect_faces(image_url: str) -> List[DetectedFace]:
                 confidence=confidence,
             ))
 
+        print(f"[DETECT] Returning {len(faces)} valid faces")
         return faces
 
     finally:

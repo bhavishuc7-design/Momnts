@@ -4,9 +4,11 @@ import { redis } from '../lib/redis.js'
 import { prisma } from '../lib/prisma.js'
 import axios from 'axios'
 import { randomUUID } from 'crypto'
+import { matchingQueue } from '../lib/queue.js'
+import { publishPhotoProcessed } from '../lib/publisher.js'
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL!
-const SIMILARITY_THRESHOLD = 0.6
+const SIMILARITY_THRESHOLD = 0.75
 
 // Worker listens to the photo-processing queue
 // and processes one job at a time
@@ -90,6 +92,23 @@ const worker = new Worker(
 
           faceProfileId = newProfileId
           console.log(`  New face profile created: ${faceProfileId}`)
+
+          // ── Step 2b: Trigger matching for all users with selfies in this event ──
+          // This handles the case where users joined before photos were uploaded
+          const usersWithSelfies = await prisma.$queryRaw<any[]>`
+            SELECT DISTINCT ea.user_id
+            FROM "EventAccess" ea
+            INNER JOIN "User" u ON u.id = ea.user_id
+            WHERE ea.event_id = ${eventId} AND u.selfie_embedding IS NOT NULL
+          `
+
+          for (const user of usersWithSelfies) {
+            await matchingQueue.add('match-user', {
+              userId: user.user_id,
+              eventId: eventId,
+            })
+            console.log(`  Enqueued matching job for user ${user.user_id}`)
+          }
         }
 
         // ── Step 3: Create PHOTO_FACE row ──
@@ -110,10 +129,45 @@ const worker = new Worker(
       }
 
       // ── Step 4: Mark photo as processed ──
-      await prisma.photo.update({
+      const updatedPhoto = await prisma.photo.update({
         where: { id: photoId },
         data: { processed: true }
       })
+
+      // ── Step 5: Publish WebSocket event ──
+      // Notify connected clients that this photo has been processed
+      await publishPhotoProcessed({
+        eventId,
+        photoId,
+        totalFaces: faces.length,
+        photo: {
+          id: updatedPhoto.id,
+          display_url: updatedPhoto.display_url,
+          thumb_url: updatedPhoto.thumb_url,
+          original_url: updatedPhoto.original_url,
+          width: updatedPhoto.width,
+          height: updatedPhoto.height,
+          uploaded_at: updatedPhoto.uploaded_at.toISOString(),
+          processed: true,
+        }
+      })
+
+      // ── Step 6: Trigger matching for all users with selfies ──
+      // This ensures all unclaimed face profiles (new or existing) get matched
+      const usersWithSelfies = await prisma.$queryRaw<any[]>`
+        SELECT DISTINCT ea.user_id
+        FROM "EventAccess" ea
+        INNER JOIN "User" u ON u.id = ea.user_id
+        WHERE ea.event_id = ${eventId} AND u.selfie_embedding IS NOT NULL
+      `
+
+      for (const user of usersWithSelfies) {
+        await matchingQueue.add('match-user', {
+          userId: user.user_id,
+          eventId: eventId,
+        })
+        console.log(`  Enqueued matching job for user ${user.user_id}`)
+      }
 
       console.log(`Photo ${photoId} processing complete`)
 
@@ -126,7 +180,7 @@ const worker = new Worker(
 
   {
     connection: redis,
-    concurrency: 2, // process 2 photos at a time
+    concurrency: 5, // process 5 photos at a time
   }
 )
 

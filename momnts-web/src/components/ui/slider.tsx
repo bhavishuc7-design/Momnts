@@ -9,6 +9,7 @@ function Slider({
   className,
   defaultValue,
   value,
+  onValueChange,
   min = 0,
   max = 100,
   ...props
@@ -29,6 +30,7 @@ function Slider({
       data-slot="slider"
       defaultValue={defaultValue}
       value={value}
+      onValueChange={onValueChange}
       min={min}
       max={max}
       thumbAlignment="edge"

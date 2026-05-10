@@ -10,7 +10,9 @@ import sharp from 'sharp'
 interface ProcessedPhoto {
   thumb: Buffer      // ~25KB  — shown in photo grid
   display: Buffer    // ~600KB — shown when photo is opened
-  original: Buffer   // ~2.5MB — served on download
+  original: Buffer  // ~2.5MB — served on download
+  width: number     // original image width
+  height: number    // original image height
 }
 
 export async function processImage(input: Buffer | string): Promise<ProcessedPhoto> {
@@ -18,14 +20,15 @@ export async function processImage(input: Buffer | string): Promise<ProcessedPho
   // We reuse the same input for all 3 versions
   const image = sharp(input).rotate()
 
+  // Get original dimensions before processing
+  const metadata = await image.clone().metadata()
+  const width = metadata.width || 0
+  const height = metadata.height || 0
+
   // thumb — small square crop, heavily compressed
   // Used in photo grid where many images load at once
   const thumb = await image
     .clone() // clone so we can process the same image multiple times
-    .resize(400, 400, {
-      fit: 'cover',    // crop to fill the square (like Instagram thumbnails)
-      position: 'center',
-    })
     .jpeg({ quality: 70 }) // 70% quality — good enough for thumbnails
     .toBuffer()
 
@@ -49,5 +52,5 @@ export async function processImage(input: Buffer | string): Promise<ProcessedPho
     .webp({ lossless: true }) // lossless = no quality loss, just better compression
     .toBuffer()
 
-  return { thumb, display, original }
+  return { thumb, display, original, width, height }
 }

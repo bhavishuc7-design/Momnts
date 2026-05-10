@@ -5,9 +5,11 @@
   "private": true,
   "scripts": {
     "dev": "bun --watch index.ts",
-    "worker": "bun --watch src/workers/photo.worker.ts",
-    "build":  "tsc",
-    "start":  "bun dist/server.js"
+    "worker:photos": "bun --watch src/workers/photo.worker.ts",
+    "worker:matching": "bun --watch src/workers/match.worker.ts",
+    "workers": "concurrently \"npm run worker:photos\" \"npm run worker:matching\"",
+    "build": "tsc",
+    "start": "bun dist/server.js"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -31,6 +33,7 @@
     "axios": "^1.16.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.76.2",
+    "concurrently": "^9.2.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -41,6 +44,7 @@
     "redis": "^5.12.1",
     "resend": "^6.12.0",
     "sharp": "^0.34.5",
+    "socket.io": "^4.8.3",
     "zod": "^4.3.6"
   }
 }

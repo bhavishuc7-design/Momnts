@@ -95,8 +95,8 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
         }
 
         // Store the new count for response
-        ;(eventAccess as any).newUploadCount = result.newCount
-        ;(eventAccess as any).role = result.role
+        ; (eventAccess as any).newUploadCount = result.newCount
+            ; (eventAccess as any).role = result.role
 
         // Validate each file is a valid image using sharp (not just client-controlled mimetype)
         for (const file of files) {
@@ -117,56 +117,70 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
             }
         }
 
-        // Process and upload each file
+        // Process and upload files in parallel with concurrency limit
         const uploadedPhotos = []
         const processedFiles: string[] = []
+        const CONCURRENCY = 5 // Process 5 photos simultaneously
+
+        // Helper to process a single file
+        const processSingleFile = async (file: Express.Multer.File) => {
+            const photoId = crypto.randomUUID()
+            const basePath = `events/${eventId}/${photoId}`
+
+            // Compress image into 3 versions
+            const { thumb, display, original, width, height } = await processImage(file.path)
+
+            // Upload all 3 versions to R2 in parallel
+            const [thumbUrl, displayUrl, originalUrl] = await Promise.all([
+                uploadToR2(`${basePath}/thumb.jpg`, thumb, 'image/jpeg'),
+                uploadToR2(`${basePath}/display.jpg`, display, 'image/jpeg'),
+                uploadToR2(`${basePath}/original.webp`, original, 'image/webp'),
+            ])
+
+            // Save photo record to database
+            const photo = await prisma.photo.create({
+                data: {
+                    id: photoId,
+                    event_id: eventId,
+                    user_id: req.user.id,
+                    thumb_url: thumbUrl,
+                    display_url: displayUrl,
+                    original_url: originalUrl,
+                    width: width || null,
+                    height: height || null,
+                    processed: false,
+                    is_visible: true,
+                }
+            })
+
+            // Add job to queue for face detection
+            await photoQueue.add('detect-faces', {
+                photoId: photo.id,
+                eventId: eventId,
+                displayUrl: displayUrl,
+            })
+
+            return { photo, filePath: file.path }
+        }
+
+        // Process files with concurrency limit
+        const processWithConcurrency = async (files: Express.Multer.File[]) => {
+            const results = []
+            for (let i = 0; i < files.length; i += CONCURRENCY) {
+                const batch = files.slice(i, i + CONCURRENCY)
+                const batchResults = await Promise.all(
+                    batch.map(file => processSingleFile(file))
+                )
+                results.push(...batchResults)
+            }
+            return results
+        }
 
         try {
-            for (const file of files) {
-                // Generate a unique base path for this photo's 3 versions in R2
-                // Using timestamp + random string ensures no collisions
-                const photoId = crypto.randomUUID()
-                const basePath = `events/${eventId}/${photoId}`
-
-                // Compress the uploaded image into 3 versions using sharp
-                // file.path is the temp file path from disk storage
-                const { thumb, display, original } = await processImage(file.path)
-
-                // Upload all 3 versions to R2 in parallel (faster than sequential)
-                // Promise.all waits for all 3 uploads to finish before continuing
-                const [thumbUrl, displayUrl, originalUrl] = await Promise.all([
-                    uploadToR2(`${basePath}/thumb.jpg`, thumb, 'image/jpeg'),
-                    uploadToR2(`${basePath}/display.jpg`, display, 'image/jpeg'),
-                    uploadToR2(`${basePath}/original.webp`, original, 'image/webp'),
-                ])
-
-                // Save the photo record to the database
-                // processed: false means face detection hasn't run yet
-                const photo = await prisma.photo.create({
-                    data: {
-                        id: photoId,
-                        event_id: eventId,
-                        user_id: req.user.id,
-                        thumb_url: thumbUrl,
-                        display_url: displayUrl,
-                        original_url: originalUrl,
-                        processed: false,
-                        is_visible: true,
-                    }
-                })
-
-                // Add a job to the BullMQ queue for face detection
-                // The worker will pick this up and call the Python service
-                // We don't wait for this — it happens in the background
-
-                await photoQueue.add('detect-faces', {
-                    photoId: photo.id,      // worker needs this to update processed = true
-                    eventId: eventId,       // worker needs this to scope face profiles
-                    displayUrl: displayUrl, // worker downloads this to run face detection
-                })
-
+            const results = await processWithConcurrency(files)
+            for (const { photo, filePath } of results) {
                 uploadedPhotos.push(photo)
-                processedFiles.push(file.path)
+                processedFiles.push(filePath)
             }
         } finally {
             // Clean up temp files regardless of success or error
@@ -430,6 +444,64 @@ export async function deletePhotoController(req: AuthRequest, res: Response) {
         return res.status(200).json({ message: 'Photo deleted successfully' })
 
     } catch (error) {
+        const message = error instanceof Error ? error.message : 'Internal server error'
+        return res.status(500).json({ message })
+    }
+}
+
+/**
+ * @name downloadPhotoController
+ * @description Proxy photo download from R2 to bypass CORS and force download.
+ * @route GET /photos/:eventId/:photoId/download
+ * @access Private
+ */
+export async function downloadPhotoController(req: AuthRequest, res: Response) {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ message: 'User not authenticated' })
+        }
+
+        const eventId = req.params.eventId as string
+        const photoId = req.params.photoId as string
+
+        // Verify event access
+        const eventAccess = await prisma.eventAccess.findUnique({
+            where: {
+                event_id_user_id: {
+                    event_id: eventId,
+                    user_id: req.user.id,
+                }
+            }
+        })
+
+        if (!eventAccess) {
+            return res.status(403).json({ message: 'You do not have access to this event' })
+        }
+
+        const photo = await prisma.photo.findUnique({
+            where: { id: photoId }
+        })
+
+        if (!photo || photo.event_id !== eventId) {
+            return res.status(404).json({ message: 'Photo not found' })
+        }
+
+        // Fetch from R2 and stream to response
+        const response = await fetch(photo.original_url)
+        if (!response.ok) throw new Error('Failed to fetch from storage')
+
+        const contentType = response.headers.get('content-type') || 'image/jpeg'
+
+        // Set headers to force download
+        res.setHeader('Content-Type', contentType)
+        res.setHeader('Content-Disposition', `attachment; filename="momnts-${photo.id}.jpg"`)
+
+        // Using ArrayBuffer as a fallback for simple streaming
+        const buffer = await response.arrayBuffer()
+        return res.send(Buffer.from(buffer))
+
+    } catch (error) {
+        console.error('Download proxy error:', error)
         const message = error instanceof Error ? error.message : 'Internal server error'
         return res.status(500).json({ message })
     }

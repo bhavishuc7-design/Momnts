@@ -48,7 +48,7 @@ async function registerUserController(req: Request, res: Response) {
     const accessToken = jwt.sign(
       { id: user.id, name: user.name },
       jwtSecret,
-      { expiresIn: "15m" },
+      { expiresIn: "1h" },
     );
 
     // Generate refresh token (7 days)
@@ -72,7 +72,7 @@ async function registerUserController(req: Request, res: Response) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 60 * 60 * 1000, // 1 hour
     });
 
     res.cookie("refreshToken", refreshToken, {
@@ -88,6 +88,7 @@ async function registerUserController(req: Request, res: Response) {
         id: user.id,
         username: user.name,
         email: user.email,
+        created_at: user.created_at,
       },
     });
   } catch (error:any) {
@@ -138,7 +139,7 @@ async function loginUserController(req: Request, res: Response) {
     const accessToken = jwt.sign(
       { id: user.id, name: user.name },
       jwtSecret,
-      { expiresIn: "15m" },
+      { expiresIn: "1h" },
     );
 
     // Generate refresh token (7 days)
@@ -162,7 +163,7 @@ async function loginUserController(req: Request, res: Response) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 60 * 60 * 1000, // 1 hour
     });
 
     res.cookie("refreshToken", refreshToken, {
@@ -178,6 +179,8 @@ async function loginUserController(req: Request, res: Response) {
         id: user.id,
         username: user.name,
         email: user.email,
+        selfie_url: user.selfie_url,
+        created_at: user.created_at,
       },
     });
   } catch (error) {
@@ -218,7 +221,17 @@ async function refreshUserController(req: Request, res: Response) {
     // Check if refresh token exists in database
     const storedToken = await prisma.refreshToken.findUnique({
       where: { token: refreshToken },
-      include: { user: true },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            selfie_url: true,
+            created_at: true,
+          }
+        }
+      },
     });
 
     if (!storedToken) {
@@ -235,7 +248,7 @@ async function refreshUserController(req: Request, res: Response) {
     const newAccessToken = jwt.sign(
       { id: decoded.id, name: storedToken.user.name },
       jwtSecret,
-      { expiresIn: "15m" },
+      { expiresIn: "1h" },
     );
 
     // Generate new refresh token (rotation)
@@ -262,7 +275,7 @@ async function refreshUserController(req: Request, res: Response) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 60 * 60 * 1000, // 1 hour
     });
 
     res.cookie("refreshToken", newRefreshToken, {
@@ -278,6 +291,8 @@ async function refreshUserController(req: Request, res: Response) {
         id: storedToken.user.id,
         username: storedToken.user.name,
         email: storedToken.user.email,
+        selfie_url: storedToken.user.selfie_url,
+        created_at: storedToken.user.created_at,
       },
     });
   } catch (error) {
@@ -320,7 +335,7 @@ async function logoutUserController(req: Request, res: Response) {
         await prisma.blacklist.create({
           data: {
             token: accessToken,
-            expires_at: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+            expires_at: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
           },
         });
       }
@@ -352,6 +367,7 @@ async function getMeController(req: any, res: any) {
         id: true,
         name: true,
         email: true,
+        selfie_url: true,
         created_at: true,
       },
     });
@@ -365,6 +381,7 @@ async function getMeController(req: any, res: any) {
         id: user.id,
         username: user.name,
         email: user.email,
+        selfie_url: user.selfie_url,
         created_at: user.created_at,
       },
     });

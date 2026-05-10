@@ -22,3 +22,13 @@ export const photoQueue = new Queue('photo-processing', {
     removeOnFail: 50,      // keep last 50 failed jobs for debugging
   },
 })
+
+export const matchingQueue = new Queue('face-matching', {
+  connection: redis,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 3000 },
+    removeOnComplete: 50,
+    removeOnFail: 20,
+  }
+})

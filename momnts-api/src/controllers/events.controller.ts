@@ -1,7 +1,9 @@
 import type { Response } from "express";
-import { prisma } from "../lib/prisma";
-import type { AuthRequest } from "../middleware/auth.middleware";
+import { prisma } from "../lib/prisma.js";
+import type { AuthRequest } from "../middleware/auth.middleware.js";
 import crypto from 'crypto'
+import { matchingQueue } from "../lib/queue.js";
+import { deleteFromR2, extractKeyFromUrl } from "../lib/r2.js";
 
 /**
  * @name createEventController
@@ -63,6 +65,18 @@ async function createEventController(req: AuthRequest, res: Response) {
                 user_id: req.user.id
             }
         })
+
+        // Enqueue face-matching job if user has a selfie
+        const users = await prisma.$queryRaw<any[]>`
+            SELECT id FROM "User" 
+            WHERE id = ${req.user.id} AND selfie_embedding IS NOT NULL
+        `
+        if (users.length > 0) {
+            await matchingQueue.add('match-user', {
+                userId: req.user.id,
+                eventId: event.id,
+            })
+        }
 
         return res.status(201).json({
             message: "Event created successfully",
@@ -194,6 +208,18 @@ async function joinEventController(req: AuthRequest, res: Response) {
             }
         })
 
+        // Enqueue face-matching job if user has a selfie
+        const users = await prisma.$queryRaw<any[]>`
+            SELECT id FROM "User" 
+            WHERE id = ${req.user.id} AND selfie_embedding IS NOT NULL
+        `
+        if (users.length > 0) {
+            await matchingQueue.add('match-user', {
+                userId: req.user.id,
+                eventId: event.id,
+            })
+        }
+
         return res.status(201).json({
             message: 'Joined event successfully',
             data: {
@@ -231,7 +257,13 @@ async function getJoinedEventsController(req: AuthRequest, res: Response) {
                 role: "ATTENDEE"
             },
             include: {
-                event: true
+                event: {
+                    include: {
+                        _count: {
+                            select: { event_access: true }
+                        }
+                    }
+                }
             }
         })
         return res.status(200).json({ message: "Events fetched successfully", data: events })
@@ -311,16 +343,31 @@ async function deleteEventController(req: AuthRequest, res: Response) {
             return res.status(404).json({ message: "Event not found" });
         }
 
+        // Fetch all photos to delete from R2 before removing DB records
+        const photos = await prisma.photo.findMany({
+            where: { event_id: eventId },
+            select: { thumb_url: true, display_url: true, original_url: true },
+        });
+
+        // Delete all photo files from R2 (3 versions per photo)
+        const r2Deletions = photos.flatMap((photo) => [
+            deleteFromR2(extractKeyFromUrl(photo.thumb_url)),
+            deleteFromR2(extractKeyFromUrl(photo.display_url)),
+            deleteFromR2(extractKeyFromUrl(photo.original_url)),
+        ]);
+
+        // Run all R2 deletions in parallel, don't fail if some are missing
+        await Promise.allSettled(r2Deletions);
+        console.log(`Deleted ${photos.length} photo(s) from R2 for event ${eventId}`);
+
+        // Delete event from DB — cascades to EventAccess, Photo, PhotoFace, FaceProfile
         await prisma.event.delete({
-            where: {
-                id: eventId,
-            },
+            where: { id: eventId },
         });
 
         return res.status(200).json({
             message: "Event deleted successfully",
         });
-
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Internal server error";
@@ -343,11 +390,22 @@ async function getEventsController(req: AuthRequest, res: Response) {
             where: {
                 user_id: req.user.id,
             },
+            include: {
+                _count: {
+                    select: { event_access: true }
+                }
+            }
         });
+
+        // Add user_role as ORGANIZER since these are the user's own events
+        const eventsWithRole = events.map(event => ({
+            ...event,
+            user_role: "ORGANIZER"
+        }));
 
         return res.status(200).json({
             message: "Events retrieved successfully",
-            events: events,
+            events: eventsWithRole,
         });
     } catch (error) {
         const message = error instanceof Error ? error.message : "Internal server error";
@@ -381,23 +439,114 @@ async function getEventAttendeesController(req: AuthRequest, res: Response) {
         }
 
         const attendees = await prisma.eventAccess.findMany({
-            where: { event_id: eventId, role: 'ATTENDEE' },
+            where: { event_id: eventId },
             include: {
                 user: {
-                    select: { id: true, name: true, email: true, created_at: true }
+                    select: { 
+                        id: true, 
+                        name: true, 
+                        email: true, 
+                        selfie_url: true,
+                        created_at: true,
+                    }
                 }
             },
-            orderBy: { joined_at: 'asc' }
+            orderBy: [
+                { role: 'asc' }, // ORGANIZER first
+                { joined_at: 'asc' }
+            ]
         })
+
+        // Fetch actual photo counts for each user in this event
+        const attendeesWithCounts = await Promise.all(attendees.map(async (acc) => {
+            const count = await prisma.photo.count({
+                where: {
+                    event_id: eventId,
+                    user_id: acc.user_id
+                }
+            })
+            return {
+                ...acc,
+                upload_count: count
+            }
+        }))
 
         return res.status(200).json({
             message: 'Attendees retrieved successfully',
-            data: attendees
+            data: attendeesWithCounts
         })
 
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Internal server error'
         return res.status(500).json({ message })
+    }
+}
+
+/**
+ * @name leaveEventController
+ * @description Attendee leaves an event. Deletes their uploaded photos from R2 and DB,
+ * unclaims their matched face profiles, and removes their EventAccess.
+ */
+async function leaveEventController(req: AuthRequest, res: Response) {
+    try {
+        if (!req.user?.id) {
+            return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const eventId = req.params.eventId as string;
+        const userId = req.user.id;
+
+        // Verify user is an ATTENDEE (organizers cannot leave)
+        const access = await prisma.eventAccess.findUnique({
+            where: { event_id_user_id: { event_id: eventId, user_id: userId } },
+        });
+
+        if (!access) {
+            return res.status(404).json({ message: "You are not part of this event" });
+        }
+
+        if (access.role === 'ORGANIZER') {
+            return res.status(400).json({ message: "Organizers cannot leave their own event. Delete the event instead." });
+        }
+
+        // 1. Fetch all photos uploaded by this user in the event
+        const photos = await prisma.photo.findMany({
+            where: { event_id: eventId, user_id: userId },
+            select: { id: true, thumb_url: true, display_url: true, original_url: true },
+        });
+
+        // 2. Delete photo files from R2
+        if (photos.length > 0) {
+            const r2Deletions = photos.flatMap((photo) => [
+                deleteFromR2(extractKeyFromUrl(photo.thumb_url)),
+                deleteFromR2(extractKeyFromUrl(photo.display_url)),
+                deleteFromR2(extractKeyFromUrl(photo.original_url)),
+            ]);
+            await Promise.allSettled(r2Deletions);
+            console.log(`Deleted ${photos.length} photo(s) from R2 for user ${userId} leaving event ${eventId}`);
+
+            // 3. Delete photos from DB (cascades to PhotoFace)
+            await prisma.photo.deleteMany({
+                where: { event_id: eventId, user_id: userId },
+            });
+        }
+
+        // 4. Unclaim face profiles matched to this user in this event
+        await prisma.faceProfile.updateMany({
+            where: { event_id: eventId, claimed_by: userId },
+            data: { claimed_by: null, is_claimed: false },
+        });
+
+        // 5. Delete EventAccess record
+        await prisma.eventAccess.delete({
+            where: { event_id_user_id: { event_id: eventId, user_id: userId } },
+        });
+
+        return res.status(200).json({ message: "Left event successfully" });
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Internal server error";
+        return res.status(500).json({ message });
     }
 }
 
@@ -410,5 +559,6 @@ export {
     joinEventController,
     getJoinedEventsController,
     getEventAttendeesController,
-    generateUniqueInviteCode
+    generateUniqueInviteCode,
+    leaveEventController
 };

@@ -8,6 +8,7 @@ import {
     getEventsController, 
     getJoinedEventsController, 
     joinEventController, 
+    leaveEventController,
     updateEventDetailsController 
 } from "../controllers/events.controller";
 import { authenticate } from "../middleware/auth.middleware";
@@ -40,6 +41,9 @@ eventsRouter.get("/:eventId/attendees", authenticate, getEventAttendeesControlle
 
 // Regenerate invite code (organizer only — if code is compromised)
 eventsRouter.patch("/:eventId/regenerate-code", authenticate, generateUniqueInviteCode)
+
+// Leave event (attendee only)
+eventsRouter.post("/:eventId/leave", authenticate, leaveEventController)
 
 
 export { eventsRouter };
