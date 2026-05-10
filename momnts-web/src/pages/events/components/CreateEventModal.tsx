@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 import { format } from 'date-fns'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
@@ -17,6 +18,7 @@ interface CreateEventModalProps {
 }
 
 export const CreateEventModal = ({ open, onOpenChange, onEventCreated }: CreateEventModalProps) => {
+  const navigate = useNavigate()
   const [newEventName, setNewEventName] = useState('')
   const [newEventLocation, setNewEventLocation] = useState('')
   const [newEventDate, setNewEventDate] = useState<Date | undefined>()
@@ -30,7 +32,7 @@ export const CreateEventModal = ({ open, onOpenChange, onEventCreated }: CreateE
 
     try {
       setCreatingEvent(true)
-      await eventsApi.createEvent(
+      const createdEvent = await eventsApi.createEvent(
         newEventName,
         newEventLocation,
         newEventDate.toISOString(),
@@ -41,6 +43,7 @@ export const CreateEventModal = ({ open, onOpenChange, onEventCreated }: CreateE
       setNewEventName('')
       setNewEventLocation('')
       setNewEventDate(undefined)
+      navigate(`/events/${createdEvent.id}`)
       // Refresh events
       const [myEvents, joinedEvents] = await Promise.all([
         eventsApi.getMyEvents(),
@@ -70,7 +73,7 @@ export const CreateEventModal = ({ open, onOpenChange, onEventCreated }: CreateE
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Create New Event</DialogTitle>
+          <DialogTitle className="text-4xl font-sirage">Create New Event</DialogTitle>
           <DialogDescription>
             Fill in the details to create a new event.
           </DialogDescription>

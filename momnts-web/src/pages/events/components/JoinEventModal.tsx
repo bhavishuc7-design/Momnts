@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router'
 import { Button } from '../../../components/ui/button'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '../../../components/ui/input-otp'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../../components/ui/dialog'
@@ -13,6 +14,7 @@ interface JoinEventModalProps {
 }
 
 export const JoinEventModal = ({ open, onOpenChange, onEventJoined }: JoinEventModalProps) => {
+  const navigate = useNavigate()
   const [inviteCode, setInviteCode] = useState('')
   const [joiningEvent, setJoiningEvent] = useState(false)
 
@@ -24,10 +26,11 @@ export const JoinEventModal = ({ open, onOpenChange, onEventJoined }: JoinEventM
 
     try {
       setJoiningEvent(true)
-      await eventsApi.joinEvent(inviteCode)
-      toast.success('Successfully joined event!')
+      const event = await eventsApi.joinEvent(inviteCode)
+      toast.success(`Successfully joined ${event.name}!`)
       onOpenChange(false)
       setInviteCode('')
+      navigate(`/events/${event.id}`)
       // Refresh events
       const [myEvents, joinedEvents] = await Promise.all([
         eventsApi.getMyEvents(),
@@ -55,7 +58,7 @@ export const JoinEventModal = ({ open, onOpenChange, onEventJoined }: JoinEventM
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Join Event</DialogTitle>
+          <DialogTitle className="text-4xl font-sirage">Join Event</DialogTitle>
           <DialogDescription>
             Enter the 6-digit invite code to join an event.
           </DialogDescription>

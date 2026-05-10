@@ -1,42 +1,84 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router'
+import { useAuth } from '../../features/auth/hooks/useAuth'
 import { Button } from '../../components/ui/button'
-import { Badge } from '../../components/ui/badge'
-import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog'
-import { 
-  ArrowLeft, 
-  Upload, 
-  Images, 
-  User, 
-  CloudArrowUp, 
-  X,
-  Crown,
-  Calendar,
-  MapPin,
-  Users,
-  Link as LinkIcon,
-  Check
-} from '@phosphor-icons/react'
+import { ArrowLeft } from '@phosphor-icons/react'
 import { eventsApi, EventData } from '../../features/events/services/events.api'
 import { photosApi, PhotoData } from '../../features/events/services/photos.api'
 import { toast } from 'sonner'
-import { format } from 'date-fns'
+import { useEventSocket } from '../../hooks/useEventSocket'
+import EventHeader from './components/EventHeader'
+import PhotoGrid from './components/PhotoGrid'
+import UploadModal, { FileUploadStatus } from './components/UploadModal'
+import EventSettingsModal from './components/EventSettingsModal'
+import AttendeesModal from './components/AttendeesModal'
+import PhotoCarousel from './components/PhotoCarousel'
 
 type TabType = 'all' | 'your-photos' | 'your-uploads'
 
 const EventDetails = () => {
   const { eventId } = useParams<{ eventId: string }>()
   const navigate = useNavigate()
-  
+  const { user } = useAuth()
+
   const [activeTab, setActiveTab] = useState<TabType>('all')
   const [event, setEvent] = useState<EventData | null>(null)
   const [photos, setPhotos] = useState<PhotoData[]>([])
+  const [myPhotos, setMyPhotos] = useState<PhotoData[]>([])
+  const [myPhotosPrompt, setMyPhotosPrompt] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [inviteCodeCopied, setInviteCodeCopied] = useState(false)
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false)
+  const [settingsForm, setSettingsForm] = useState({
+    name: '',
+    date: '',
+    location: '',
+    isActive: true
+  })
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [carouselOpen, setCarouselOpen] = useState(false)
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0)
+  const [isSelectMode, setIsSelectMode] = useState(false)
+  const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set())
+  const [attendeesModalOpen, setAttendeesModalOpen] = useState(false)
+  const [attendees, setAttendees] = useState<any[]>([])
+  const [attendeesLoading, setAttendeesLoading] = useState(false)
+  const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([])
+
+  // ── Real-time WebSocket updates ──
+  useEventSocket({
+    eventId,
+    onPhotoProcessed: useCallback((data) => {
+      // Update the photo's processed flag in state (no full refetch needed)
+      setPhotos(prev => prev.map(p =>
+        p.id === data.photoId ? { ...p, processed: true, _count: { photo_faces: data.totalFaces } } : p
+      ))
+
+      if (data.totalFaces > 0) {
+        toast.info(`${data.totalFaces} face(s) detected in a photo`, {
+          duration: 3000,
+        })
+      }
+    }, []),
+    onFaceMatched: useCallback((data) => {
+      // Only show toast to the matched user
+      if (data.userId === user?.id) {
+        toast.success(`Your face found in ${data.matchedPhotoCount} photo(s)! 🎉`, {
+          duration: 5000,
+        })
+        // Refetch "Your Photos" tab data so it's ready when user switches
+        if (eventId) {
+          photosApi.getMyPhotos(eventId).then(response => {
+            setMyPhotos(response.data)
+            setMyPhotosPrompt(response.prompt)
+          }).catch(console.error)
+        }
+      }
+    }, [user?.id, eventId]),
+  })
 
   const fetchEventDetails = useCallback(async () => {
     if (!eventId) return
@@ -63,18 +105,63 @@ const EventDetails = () => {
     }
   }, [eventId])
 
+  const fetchMyPhotos = useCallback(async () => {
+    if (!eventId) return
+    try {
+      setLoading(true)
+      const response = await photosApi.getMyPhotos(eventId)
+      setMyPhotos(response.data)
+      setMyPhotosPrompt(response.prompt)
+    } catch (error) {
+      console.error('Failed to fetch your photos:', error)
+      toast.error('Failed to load your photos')
+    } finally {
+      setLoading(false)
+    }
+  }, [eventId])
+
+  const fetchAttendees = useCallback(async () => {
+    if (!eventId) return
+    try {
+      setAttendeesLoading(true)
+      const data = await eventsApi.getEventAttendees(eventId)
+      setAttendees(data)
+    } catch (error) {
+      console.error('Failed to fetch attendees:', error)
+      toast.error('Failed to load attendees')
+    } finally {
+      setAttendeesLoading(false)
+    }
+  }, [eventId])
+
   useEffect(() => {
     fetchEventDetails()
     fetchPhotos()
   }, [fetchEventDetails, fetchPhotos])
 
+  const fetchPhotosForTab = useCallback(async (tab: TabType) => {
+    if (tab === 'your-photos') {
+      await fetchMyPhotos()
+    } else if (tab === 'all' || tab === 'your-uploads') {
+      // For 'all' and 'your-uploads', we still use the main photos list
+      if (photos.length === 0) {
+        await fetchPhotos()
+      }
+    }
+  }, [fetchMyPhotos, fetchPhotos, photos.length])
+
+  // Handle tab changes
+  useEffect(() => {
+    fetchPhotosForTab(activeTab)
+  }, [activeTab, fetchPhotosForTab])
+
   const filteredPhotos = photos.filter((photo) => {
     switch (activeTab) {
       case 'your-uploads':
-        return photo.user_id === event?.user_id || photo.user?.id === event?.user_id
+        return photo.user_id === user?.id || photo.user?.id === user?.id
       case 'your-photos':
-        // For now, return all - face matching to be implemented
-        return true
+        // Use the matched photos from API
+        return myPhotos.some(myPhoto => myPhoto.id === photo.id)
       case 'all':
       default:
         return true
@@ -90,13 +177,46 @@ const EventDetails = () => {
 
   const handleUpload = async () => {
     if (!eventId || selectedFiles.length === 0) return
-    
+
+    if (event?.user_role === 'ATTENDEE') {
+      const limit = event.attendee_upload_limit
+      const currentCount = photos.filter(p => p.user_id === user?.id).length
+      if (currentCount + selectedFiles.length > limit) {
+        toast.error(`Max upload limit is ${limit} photo(s)`)
+        return
+      }
+    }
+
     try {
       setUploading(true)
-      await photosApi.uploadPhotos(eventId, selectedFiles)
+      // Initialize all files as 'uploading'
+      setFileStatuses(selectedFiles.map(() => 'uploading'))
+
+      await photosApi.uploadPhotos(
+        eventId,
+        selectedFiles,
+        (fileIndex) => {
+          // Mark specific file as completed
+          setFileStatuses(prev => {
+            const newStatuses = [...prev]
+            newStatuses[fileIndex] = 'completed'
+            return newStatuses
+          })
+        },
+        (fileIndex) => {
+          // Mark specific file as error
+          setFileStatuses(prev => {
+            const newStatuses = [...prev]
+            newStatuses[fileIndex] = 'error'
+            return newStatuses
+          })
+        }
+      )
+
       toast.success(`${selectedFiles.length} photo(s) uploaded successfully!`)
       setUploadModalOpen(false)
       setSelectedFiles([])
+      setFileStatuses([])
       fetchPhotos()
     } catch (error) {
       console.error('Failed to upload photos:', error)
@@ -115,13 +235,124 @@ const EventDetails = () => {
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'MMM dd, yyyy')
+  const handleOpenSettings = () => {
+    if (event) {
+      setSettingsForm({
+        name: event.name,
+        date: event.date,
+        location: event.location,
+        isActive: event.is_active
+      })
+      setSettingsModalOpen(true)
+    }
   }
 
-  // Pinterest-style masonry layout with 3 columns
-  const getColumnPhotos = (columnIndex: number) => {
-    return filteredPhotos.filter((_, index) => index % 3 === columnIndex)
+  const handleSaveSettings = async () => {
+    if (!eventId) return
+
+    try {
+      setSavingSettings(true)
+      await eventsApi.updateEvent(
+        eventId,
+        settingsForm.name,
+        settingsForm.date,
+        settingsForm.location,
+        settingsForm.isActive
+      )
+      toast.success('Event updated successfully!')
+      setSettingsModalOpen(false)
+      fetchEventDetails()
+    } catch (error) {
+      console.error('Failed to update event:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update event')
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
+  const handlePhotoClick = (index: number) => {
+    if (isSelectMode) {
+      const photoId = filteredPhotos[index].id
+      handleToggleSelect(photoId)
+    } else {
+      setCurrentPhotoIndex(index)
+      setCarouselOpen(true)
+    }
+  }
+
+  const handleDeletePhoto = async (photoId: string) => {
+    if (!eventId) return
+    try {
+      await photosApi.deletePhoto(eventId, photoId)
+      toast.success('Photo deleted')
+      fetchPhotos()
+    } catch (error) {
+      console.error('Failed to delete photo:', error)
+      toast.error('Failed to delete photo')
+    }
+  }
+
+  const handleToggleSelect = (photoId: string) => {
+    setSelectedPhotoIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(photoId)) {
+        next.delete(photoId)
+      } else {
+        next.add(photoId)
+      }
+      return next
+    })
+  }
+
+  const handleDownloadSelected = async () => {
+    if (selectedPhotoIds.size === 0) return
+
+    const photosToDownload = photos.filter(p => selectedPhotoIds.has(p.id))
+
+    toast.info(`Downloading ${photosToDownload.length} photo(s)...`)
+
+    for (let i = 0; i < photosToDownload.length; i++) {
+      const photo = photosToDownload[i]
+      try {
+        const apiUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000'
+        const downloadUrl = `${apiUrl}/api/photos/${photo.event_id}/${photo.id}/download`
+
+        const response = await fetch(downloadUrl, {
+          credentials: 'include' // Required for authenticated route
+        })
+
+        if (!response.ok) throw new Error('Network response was not ok')
+
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `momnts-${photo.id}.jpg`
+        document.body.appendChild(a)
+        a.click()
+
+        // Cleanup
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url)
+          document.body.removeChild(a)
+        }, 100)
+
+        // Progress update if many photos
+        if (photosToDownload.length > 5 && (i + 1) % 5 === 0) {
+          toast.info(`Downloaded ${i + 1}/${photosToDownload.length}...`)
+        }
+
+        // Delay to prevent browser blocking
+        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch (error) {
+        console.error(`Failed to download photo ${photo.id}:`, error)
+        toast.error(`Failed to download photo ${i + 1}`)
+      }
+    }
+
+    toast.success('All downloads initiated!')
+    setIsSelectMode(false)
+    setSelectedPhotoIds(new Set())
   }
 
   if (!event && !loading) {
@@ -138,211 +369,88 @@ const EventDetails = () => {
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
-      {/* Header */}
-      <div className="sticky top-0 z-50 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md border-b border-neutral-200 dark:border-neutral-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            {/* Left: Back + Event Info */}
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => navigate('/events')}>
-                <ArrowLeft size={20} weight="bold" />
-              </Button>
-              
-              <div>
-                <h1 className="text-xl font-bold">{event?.name || 'Loading...'}</h1>
-                <div className="flex items-center gap-2 text-sm text-neutral-500">
-                  <MapPin size={14} />
-                  <span>{event?.location}</span>
-                  <span>•</span>
-                  <Calendar size={14} />
-                  <span>{event?.date ? formatDate(event.date) : ''}</span>
-                </div>
-              </div>
-
-              {/* Invite Code Badge for Organizer */}
-              {event?.user_role === 'ORGANIZER' && (
-                <Badge 
-                  variant="outline" 
-                  className="cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                  onClick={handleCopyInviteCode}
-                >
-                  <LinkIcon size={12} className="mr-1" />
-                  {inviteCodeCopied ? <Check size={12} /> : event?.invite_code}
-                </Badge>
-              )}
-            </div>
-
-            {/* Right: Upload Button */}
-            <Button onClick={() => setUploadModalOpen(true)}>
-              <Upload size={16} weight="bold" className="mr-2" />
-              Upload Photos
-            </Button>
-          </div>
-
-          {/* Tabs Navigation */}
-          <div className="mt-4">
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabType)}>
-              <TabsList className="bg-neutral-100 dark:bg-neutral-800">
-                <TabsTrigger value="all" className="flex items-center gap-2">
-                  <Images size={16} />
-                  All Photos ({photos.length})
-                </TabsTrigger>
-                <TabsTrigger value="your-photos" className="flex items-center gap-2">
-                  <User size={16} />
-                  Your Photos
-                </TabsTrigger>
-                <TabsTrigger value="your-uploads" className="flex items-center gap-2">
-                  <CloudArrowUp size={16} />
-                  Your Uploads
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </div>
-      </div>
-
-      {/* Photo Grid - Pinterest Style */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <p className="text-neutral-500">Loading photos...</p>
-          </div>
-        ) : filteredPhotos.length === 0 ? (
-          <div className="text-center py-12">
-            <Images size={48} className="mx-auto text-neutral-300 mb-4" />
-            <p className="text-neutral-500">
-              {activeTab === 'all' 
-                ? 'No photos yet. Be the first to upload!' 
-                : activeTab === 'your-uploads'
-                ? "You haven't uploaded any photos yet."
-                : "No photos matched with your face yet."}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Column 1 */}
-            <div className="flex flex-col gap-4">
-              {getColumnPhotos(0).map((photo) => (
-                <PhotoCard key={photo.id} photo={photo} />
-              ))}
-            </div>
-            {/* Column 2 */}
-            <div className="flex flex-col gap-4">
-              {getColumnPhotos(1).map((photo) => (
-                <PhotoCard key={photo.id} photo={photo} />
-              ))}
-            </div>
-            {/* Column 3 */}
-            <div className="flex flex-col gap-4">
-              {getColumnPhotos(2).map((photo) => (
-                <PhotoCard key={photo.id} photo={photo} />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Upload Modal */}
-      <Dialog open={uploadModalOpen} onOpenChange={setUploadModalOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Upload Photos</DialogTitle>
-            <DialogDescription>
-              Select photos to upload to this event. Face detection will run automatically.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-              id="photo-upload"
-            />
-            <label htmlFor="photo-upload">
-              <div className="border-2 border-dashed border-neutral-300 dark:border-neutral-700 rounded-xl p-8 text-center cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors">
-                <CloudArrowUp size={48} className="mx-auto text-neutral-400 mb-4" />
-                <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                  {selectedFiles.length > 0 
-                    ? `${selectedFiles.length} file(s) selected` 
-                    : 'Click to select photos or drag and drop'}
-                </p>
-              </div>
-            </label>
-            
-            {selectedFiles.length > 0 && (
-              <div className="mt-4 max-h-32 overflow-y-auto">
-                {selectedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between py-2 text-sm">
-                    <span className="truncate">{file.name}</span>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-6 w-6"
-                      onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== index))}
-                    >
-                      <X size={14} />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => {
-              setUploadModalOpen(false)
-              setSelectedFiles([])
-            }}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleUpload} 
-              disabled={selectedFiles.length === 0 || uploading}
-            >
-              {uploading ? 'Uploading...' : `Upload ${selectedFiles.length || ''} Photo(s)`}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
-
-// Photo Card Component
-const PhotoCard = ({ photo }: { photo: PhotoData }) => {
-  const [imageLoaded, setImageLoaded] = useState(false)
-
-  return (
-    <div className="relative group overflow-hidden rounded-xl bg-neutral-100 dark:bg-neutral-800">
-      <img
-        src={photo.display_url}
-        alt="Event photo"
-        className={`w-full h-auto transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
-        onLoad={() => setImageLoaded(true)}
+      <EventHeader
+        event={event}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onBack={() => navigate('/events')}
+        onUploadClick={() => setUploadModalOpen(true)}
+        onSettingsClick={handleOpenSettings}
+        inviteCodeCopied={inviteCodeCopied}
+        onCopyInviteCode={handleCopyInviteCode}
+        photoCount={photos.length}
+        isSelectMode={isSelectMode}
+        onToggleSelectMode={() => {
+          setIsSelectMode(!isSelectMode)
+          setSelectedPhotoIds(new Set())
+        }}
+        selectedCount={selectedPhotoIds.size}
+        onDownloadSelected={handleDownloadSelected}
+        onAttendeesClick={() => {
+          setAttendeesModalOpen(true)
+          fetchAttendees()
+        }}
+        userUploadCount={photos.filter(p => p.user_id === user?.id || p.user?.id === user?.id).length}
+        onLeaveEvent={async () => {
+          if (!eventId) return
+          try {
+            await eventsApi.leaveEvent(eventId)
+            toast.success('Left event successfully')
+            navigate('/events')
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to leave event')
+            throw error
+          }
+        }}
       />
-      
-      {!imageLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-neutral-300 border-t-neutral-600 rounded-full animate-spin" />
-        </div>
-      )}
 
-      {/* Hover Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <div className="absolute bottom-0 left-0 right-0 p-3">
-          <p className="text-white text-sm font-medium truncate">
-            {photo.user?.name || 'Unknown'}
-          </p>
-          {photo._count?.photo_faces > 0 && (
-            <p className="text-white/70 text-xs">
-              {photo._count.photo_faces} face{photo._count.photo_faces > 1 ? 's' : ''} detected
-            </p>
-          )}
-        </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <PhotoGrid
+          photos={filteredPhotos}
+          loading={loading}
+          activeTab={activeTab}
+          event={event}
+          onPhotoClick={handlePhotoClick}
+          onDelete={handleDeletePhoto}
+          isSelectMode={isSelectMode}
+          selectedPhotoIds={selectedPhotoIds}
+          onToggleSelect={handleToggleSelect}
+          currentUserId={user?.id}
+          userRole={event?.user_role}
+        />
       </div>
+
+      <UploadModal
+        open={uploadModalOpen}
+        onOpenChange={setUploadModalOpen}
+        selectedFiles={selectedFiles}
+        onFileSelect={handleFileSelect}
+        onRemoveFile={(index) => {
+          setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+          setFileStatuses(prev => prev.filter((_, i) => i !== index))
+        }}
+        onUpload={handleUpload}
+        uploading={uploading}
+        fileStatuses={fileStatuses}
+      />
+
+      <AttendeesModal
+        open={attendeesModalOpen}
+        onOpenChange={setAttendeesModalOpen}
+        attendees={attendees}
+        loading={attendeesLoading}
+      />
+
+      <PhotoCarousel
+        open={carouselOpen}
+        onOpenChange={setCarouselOpen}
+        photos={filteredPhotos}
+        initialIndex={currentPhotoIndex}
+        onDelete={handleDeletePhoto}
+        currentUserId={user?.id}
+        userRole={event?.user_role}
+        isEventActive={event?.is_active}
+      />
     </div>
   )
 }

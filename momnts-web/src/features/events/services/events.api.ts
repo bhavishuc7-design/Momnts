@@ -68,7 +68,8 @@ export const eventsApi = {
       throw new Error(error.message || "Failed to create event")
     }
 
-    return response.json()
+    const data = await response.json()
+    return { ...data.event, user_role: data.eventAccess?.role || 'ORGANIZER' }
   },
 
   async joinEvent(inviteCode: string): Promise<EventData> {
@@ -84,7 +85,8 @@ export const eventsApi = {
       throw new Error(error.message || "Failed to join event")
     }
 
-    return response.json()
+    const data = await response.json()
+    return { ...data.data.event, user_role: data.data.role }
   },
 
   async getEventDetails(eventId: string): Promise<EventData> {
@@ -99,5 +101,60 @@ export const eventsApi = {
 
     const data = await response.json()
     return data.event
+  },
+
+  async updateEvent(eventId: string, name: string, date: string, location: string, isActive: boolean): Promise<EventData> {
+    const response = await fetch(`${API_URL}/api/events/${eventId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, date, location, isActive }),
+      credentials: "include",
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || "Failed to update event")
+    }
+
+    const data = await response.json()
+    return data.event
+  },
+
+  async getEventAttendees(eventId: string): Promise<any[]> {
+    const response = await fetch(`${API_URL}/api/events/${eventId}/attendees`, {
+      credentials: "include",
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || "Failed to fetch attendees")
+    }
+
+    const data = await response.json()
+    return data.data
+  },
+
+  async deleteEvent(eventId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/events/${eventId}`, {
+      method: "DELETE",
+      credentials: "include",
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || "Failed to delete event")
+    }
+  },
+
+  async leaveEvent(eventId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/api/events/${eventId}/leave`, {
+      method: "POST",
+      credentials: "include",
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || "Failed to leave event")
+    }
   },
 }

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes import detect, match
+from routes import detect, match, embed
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,6 +13,7 @@ app = FastAPI(
 # Register route handlers
 app.include_router(detect.router)
 app.include_router(match.router)
+app.include_router(embed.router)
 
 @app.get("/health")
 def health():

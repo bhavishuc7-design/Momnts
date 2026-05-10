@@ -19,6 +19,7 @@ model User {
   name             String
   email            String                      @unique
   password_hash    String
+  selfie_url       String?
   selfie_embedding Unsupported("vector(512)")?
   created_at       DateTime                    @default(now())
 
@@ -76,6 +77,8 @@ model Photo {
   original_url String
   display_url  String
   thumb_url    String
+  width        Int?
+  height       Int?
 
   event Event @relation(fields: [event_id], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)

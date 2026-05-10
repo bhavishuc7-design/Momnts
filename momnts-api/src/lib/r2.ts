@@ -22,6 +22,8 @@ if (missingVars.length > 0) {
 
 // S3Client works with R2 because Cloudflare R2 is S3-compatible
 // We just point it to Cloudflare's endpoint instead of AWS
+// For production with SSL certificate issues, set NODE_TLS_REJECT_UNAUTHORIZED=0
+// as an environment variable when starting the server, NOT in code
 export const r2 = new S3Client({
   region: 'auto', // R2 doesn't use regions like AWS, 'auto' is always correct
   endpoint: `https://${requiredEnvVars.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover'
@@ -24,6 +24,22 @@ const Events = () => {
   // Modal States
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [joinModalOpen, setJoinModalOpen] = useState(false)
+
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // "/" keyboard shortcut to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const tag = (e.target as HTMLElement)?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -101,16 +117,16 @@ const Events = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pt-8">
       {/* Header Row */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-4xl font-bold font-melodrama">Events</h1>
+      <div className="flex flex-col md:flex-row items-start justify-between gap-2">
+        <h1 className="text-6xl font-bold font-sirage">Events</h1>
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => setCreateModalOpen(true)}>
+          <Button variant="outline" className="cursor-pointer px-4 rounded-full" onClick={() => setCreateModalOpen(true)}>
             <Plus size={16} weight="bold" className="mr-2" />
             Create Event
           </Button>
-          <Button onClick={() => setJoinModalOpen(true)}>
+          <Button className="cursor-pointer rounded-full px-4" onClick={() => setJoinModalOpen(true)}>
             <Ticket size={16} weight="fill" className="mr-2" />
             Join Event
           </Button>
@@ -118,16 +134,20 @@ const Events = () => {
       </div>
 
       {/* Search and Filter Row */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center flex-wrap gap-2">
         <div className="flex-1 max-w-md">
           <div className="relative">
             <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={18} />
             <Input
+              ref={searchInputRef}
               placeholder="Search events by name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="px-10 pr-12 w-[90vw] md:w-full"
             />
+            <kbd className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex h-5 items-center rounded border border-neutral-200 bg-neutral-100 px-1.5 font-mono text-[11px] font-medium text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400">
+              /
+            </kbd>
           </div>
         </div>
 
@@ -135,7 +155,7 @@ const Events = () => {
           variant="outline"
           size="sm"
           onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 cursor-pointer"
         >
           <ArrowsDownUp size={16} weight="bold" />
           Sort by Date
@@ -143,7 +163,7 @@ const Events = () => {
 
         <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
           <PopoverTrigger>
-            <Button variant="outline" size="sm" className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="flex items-center gap-2 cursor-pointer">
               <CalendarIcon size={16} weight="bold" />
               {dateRange.from && dateRange.to 
                 ? `${format(dateRange.from, 'MMM dd')} - ${format(dateRange.to, 'MMM dd')}`
@@ -168,13 +188,13 @@ const Events = () => {
 
         <Popover open={isRoleFilterOpen} onOpenChange={setIsRoleFilterOpen}>
           <PopoverTrigger>
-            <Button variant="outline" size="sm" className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="flex items-center gap-2 cursor-pointer">
               {getRoleFilterIcon()}
               {getRoleFilterLabel()}
               <CaretDown size={12} weight="bold" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-40 p-1" align="end">
+          <PopoverContent className="w-full p-1" align="end">
             <div className="flex flex-col gap-1">
               <Button
                 variant={roleFilter === 'ALL' ? 'default' : 'ghost'}
@@ -183,7 +203,7 @@ const Events = () => {
                   setRoleFilter('ALL')
                   setIsRoleFilterOpen(false)
                 }}
-                className="justify-start"
+                className="justify-start cursor-pointer"
               >
                 <Faders size={16} weight="bold" className="mr-2" />
                 All Events
@@ -195,7 +215,7 @@ const Events = () => {
                   setRoleFilter('ORGANIZER')
                   setIsRoleFilterOpen(false)
                 }}
-                className="justify-start"
+                className="justify-start cursor-pointer"
               >
                 <Crown size={16} weight="fill" className="mr-2" />
                 Organizing
@@ -207,7 +227,7 @@ const Events = () => {
                   setRoleFilter('ATTENDEE')
                   setIsRoleFilterOpen(false)
                 }}
-                className="justify-start"
+                className="justify-start cursor-pointer"
               >
                 <User size={16} weight="fill" className="mr-2" />
                 Attending
@@ -221,7 +241,7 @@ const Events = () => {
             variant="ghost"
             size="sm"
             onClick={handleResetFilters}
-            className="flex items-center gap-2 text-neutral-500 hover:text-neutral-700"
+            className="flex items-center gap-2 text-neutral-500 hover:text-neutral-700 cursor-pointer"
           >
             <Faders size={16} weight="bold" />
             Reset Filters

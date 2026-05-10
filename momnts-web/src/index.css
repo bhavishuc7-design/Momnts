@@ -20,10 +20,18 @@
   src: url("./assets/fonts/Relationshipofmélodrame.ttf") format("truetype");
 }
 
+@font-face{
+  font-family: "Sirage";
+  font-style: normal;
+  font-display: swap;
+  src: url("./assets/fonts/Sirage.ttf") format("truetype");
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Inter Variable', sans-serif;
     --font-logo:"BulgaryRose", sans-serif;
+    --font-sirage:"Sirage",sans-serif;
     --font-body: 'Poppins', sans-serif;
     --font-melodrama: 'Melodrama', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);

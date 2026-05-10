@@ -1,66 +1,72 @@
 import { useNavigate } from 'react-router'
 import { format } from 'date-fns'
-import { Badge } from '../../../components/ui/badge'
-import { Users, MapPin } from '@phosphor-icons/react'
 import { EventData } from '../../../features/events/services/events.api'
+import { Button } from "../../../components/ui/button"
+import { CalendarDotsIcon, MapPinAreaIcon } from '@phosphor-icons/react'
 
 interface EventCardProps {
   event: EventData
 }
 
-// Color themes for different gradients
 const gradientThemes = [
-  // Ocean Blue
   {
-    bg: 'from-blue-700 via-blue-500 to-cyan-400',
-    wave1: ['#1e3a8a', '#3b82f6'],
-    wave2: ['#0891b2', '#22d3ee', '#67e8f9'],
+    // Ocean sunset
+    bg: 'from-[#1a3a6b] via-[#e05a2b] to-[#f0a500]',
+    wave1: '#c0392b',
+    wave2: '#e8751a',
+    wave3: '#1a5276',
   },
-  // Sunset Orange
   {
-    bg: 'from-orange-700 via-orange-500 to-amber-400',
-    wave1: ['#c2410c', '#f97316'],
-    wave2: ['#d97706', '#fbbf24', '#fcd34d'],
+    // Purple dusk
+    bg: 'from-[#2d1b69] via-[#c0392b] to-[#e8751a]',
+    wave1: '#6c3483',
+    wave2: '#c0392b',
+    wave3: '#2d1b69',
   },
-  // Purple Dream
   {
-    bg: 'from-purple-700 via-purple-500 to-pink-400',
-    wave1: ['#6b21a8', '#a855f7'],
-    wave2: ['#be185d', '#ec4899', '#f9a8d4'],
+    // Forest teal
+    bg: 'from-[#0d3b2e] via-[#16a085] to-[#f39c12]',
+    wave1: '#0d6e4f',
+    wave2: '#16a085',
+    wave3: '#0d3b2e',
   },
-  // Forest Green
   {
-    bg: 'from-emerald-700 via-emerald-500 to-teal-400',
-    wave1: ['#047857', '#10b981'],
-    wave2: ['#0d9488', '#14b8a6', '#5eead4'],
+    // Rose gold
+    bg: 'from-[#6b1a3a] via-[#e05a8a] to-[#f0c050]',
+    wave1: '#c0395a',
+    wave2: '#e8751a',
+    wave3: '#6b1a3a',
   },
-  // Rose Red
   {
-    bg: 'from-rose-700 via-rose-500 to-red-400',
-    wave1: ['#be123c', '#fb7185'],
-    wave2: ['#dc2626', '#f87171', '#fca5a5'],
+    // Midnight blue
+    bg: 'from-[#0a1628] via-[#1a4a8a] to-[#4a90d9]',
+    wave1: '#1a3a6b',
+    wave2: '#2e6da4',
+    wave3: '#0a1628',
   },
-  // Indigo Night
   {
-    bg: 'from-indigo-700 via-indigo-500 to-violet-400',
-    wave1: ['#3730a3', '#6366f1'],
-    wave2: ['#7c3aed', '#8b5cf6', '#c4b5fd'],
+    // Emerald fire
+    bg: 'from-[#0d3b2e] via-[#e05a2b] to-[#f0c050]',
+    wave1: '#16a085',
+    wave2: '#e8751a',
+    wave3: '#0d3b2e',
   },
-  // Golden Hour
   {
-    bg: 'from-amber-700 via-yellow-500 to-lime-400',
-    wave1: ['#b45309', '#eab308'],
-    wave2: ['#ca8a04', '#facc15', '#bef264'],
+    // Violet storm
+    bg: 'from-[#1a0a3b] via-[#6c3483] to-[#e05a8a]',
+    wave1: '#4a235a',
+    wave2: '#9b59b6',
+    wave3: '#1a0a3b',
   },
-  // Tropical Teal
   {
-    bg: 'from-teal-700 via-cyan-500 to-sky-400',
-    wave1: ['#115e59', '#06b6d4'],
-    wave2: ['#0284c7', '#38bdf8', '#7dd3fc'],
+    // Golden hour
+    bg: 'from-[#3b1a0a] via-[#e07820] to-[#f0d050]',
+    wave1: '#c0612b',
+    wave2: '#e8a01a',
+    wave3: '#3b1a0a',
   },
 ]
 
-// Get theme based on event ID (deterministic)
 const getThemeForEvent = (eventId: string) => {
   let hash = 0
   for (let i = 0; i < eventId.length; i++) {
@@ -68,92 +74,107 @@ const getThemeForEvent = (eventId: string) => {
     hash = ((hash << 5) - hash) + char
     hash = hash & hash
   }
-  const index = Math.abs(hash) % gradientThemes.length
-  return gradientThemes[index]
+  return gradientThemes[Math.abs(hash) % gradientThemes.length]
 }
 
 export const EventCard = ({ event }: EventCardProps) => {
   const navigate = useNavigate()
-
-  const formatDate = (dateString: string) => {
-    return format(new Date(dateString), 'MMM dd, yyyy')
-  }
-
   const theme = getThemeForEvent(event.id)
+  const isOrganizer = event.user_role === 'ORGANIZER'
 
   return (
-    <div 
+    <div
       onClick={() => navigate(`/events/${event.id}`)}
-      className="bg-white dark:bg-neutral-900 rounded-3xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
+      className="group cursor-pointer w-full bg-white dark:bg-neutral-900 rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5"
     >
-      {/* Gradient Top Half */}
-      <div className="relative h-48 overflow-hidden">
-        <div className={`absolute inset-0 bg-gradient-to-br ${theme.bg}`}>
-          <svg
-            viewBox="0 0 400 200"
-            className="absolute inset-0 w-full h-full"
-            preserveAspectRatio="none"
-          >
-            <defs>
-              <linearGradient id={`wave1-${event.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor={theme.wave1[0]} stopOpacity="0.8" />
-                <stop offset="100%" stopColor={theme.wave1[1]} stopOpacity="0.6" />
-              </linearGradient>
-              <linearGradient id={`wave2-${event.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor={theme.wave2[0]} stopOpacity="0.6" />
-                <stop offset="50%" stopColor={theme.wave2[1]} stopOpacity="0.5" />
-                <stop offset="100%" stopColor={theme.wave2[2]} stopOpacity="0.4" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,100 Q100,50 200,100 T400,80 L400,0 L0,0 Z"
-              fill={`url(#wave1-${event.id})`}
-            />
-            <path
-              d="M0,120 Q150,80 250,130 T400,100 L400,200 L0,200 Z"
-              fill={`url(#wave2-${event.id})`}
-            />
-          </svg>
-        </div>
-        
-        {/* User Role Badge */}
-        <Badge className="absolute bottom-4 left-4 bg-white/90 text-neutral-800 hover:bg-white/90 font-medium">
-          {event.user_role === 'ORGANIZER' ? 'Organizer' : 'Attendee'}
-        </Badge>
+      {/* ── Gradient image area with SVG waves ── */}
+      <div className={`relative h-52 w-full bg-gradient-to-b ${theme.bg} overflow-hidden`}>
 
-        {/* Status Badge */}
-        <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-white/90 dark:bg-neutral-800/90 rounded-full px-3 py-1">
-          <div className={`w-2 h-2 rounded-full ${event.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
-          <span className={`text-xs font-medium ${event.is_active ? 'text-green-700' : 'text-red-700'}`}>
-            {event.is_active ? 'Active' : 'Inactive'}
-          </span>
+        {/* SVG layered waves — mimics the reference exactly */}
+        <svg
+          viewBox="0 0 400 220"
+          className="absolute inset-0 w-full h-full"
+          preserveAspectRatio="none"
+        >
+          {/* Wave layer 1 — back */}
+          <path
+            d="M0,80 C60,120 120,40 200,90 C280,140 340,60 400,80 L400,220 L0,220 Z"
+            fill={theme.wave1}
+            opacity="0.85"
+          />
+          {/* Wave layer 2 — middle */}
+          <path
+            d="M0,120 C80,80 160,160 240,110 C320,60 370,130 400,100 L400,220 L0,220 Z"
+            fill={theme.wave2}
+            opacity="0.9"
+          />
+          {/* Wave layer 3 — front */}
+          <path
+            d="M0,160 C100,130 180,190 280,150 C340,130 380,170 400,155 L400,220 L0,220 Z"
+            fill={theme.wave3}
+            opacity="0.6"
+          />
+        </svg>
+
+        {/* Role badge — top left, dark pill like "FEATURED" in reference */}
+        <div className="absolute top-0 left-0">
+          <div className="bg-white/95 dark:bg-neutral-900/95 rounded-br-2xl rounded-tl-3xl px-4 py-2">
+            <span className={`text-xs font-semibold tracking-widest uppercase
+              ${isOrganizer ? 'text-amber-500' : 'text-neutral-500'}`}>
+              {isOrganizer ? 'Organizer' : 'Attendee'}
+            </span>
+          </div>
+        </div>
+
+        {/* Active / inactive — top right corner, like "New" badge in reference */}
+        <div className="absolute top-0 right-0">
+          <div className={`px-4 py-2 rounded-bl-2xl rounded-tr-3xl bg-neutral-900/80`}>
+            <span className="text-white text-xs font-semibold">
+              {event.is_active ? <div className='flex items-center justify-center gap-2'> <div className='h-[8px] w-[8px] bg-green-500 rounded-full inline'></div> Active</div> : <div className='flex items-center justify-center gap-2'> <div className='h-[8px] w-[8px] bg-red-500 rounded-full inline'></div> Inactive</div>}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Bottom Half */}
-      <div className="p-6">
-        <h2 className="text-xl font-bold text-neutral-900 dark:text-neutral-100 mb-2">
+      {/* ── Card body ── */}
+      <div className="p-5">
+        {/* Event name */}
+        <h2 className="text-xl font-bold text-neutral-900 dark:text-neutral-100 leading-snug capitalize line-clamp-1 mb-1">
           {event.name}
         </h2>
-        
-        <p className="text-neutral-600 dark:text-neutral-400 text-sm mb-4 line-clamp-2">
-          Join us for an amazing time at {event.location}. Create memories and share moments together.
-        </p>
 
-        <div className="flex items-center justify-between pt-4 border-t border-neutral-100 dark:border-neutral-800">
+        {/* Description */}
+        {/* <p className="text-neutral-500 dark:text-neutral-400 text-sm leading-relaxed line-clamp-2 mb-4">
+          {event.location} — {format(new Date(event.date), 'MMMM dd, yyyy')}. Join and relive every moment from this event.
+        </p> */}
+        <div className="flex flex-col items-start justify-center my-4 gap-2">
+          <div className='flex items-center justify-start gap-2 text-sm'>
+            <MapPinAreaIcon size={20} className='text-gray-500'/>
+            <span className='capitalize'>{event.location}</span> 
+          </div>
+          <div className='flex items-center justify-start gap-2 text-sm'>
+            <CalendarDotsIcon size={20} className='text-gray-500'/>
+            <span className=''>{format(new Date(event.date), 'MMMM dd, yyyy')}</span> 
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-neutral-100 dark:border-neutral-800 mb-4" />
+
+        {/* Footer — avatar + CTA like reference */}
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400">
-              <MapPin size={16} weight="fill" />
-              <span className="text-sm">{event.location}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400">
-              <Users size={16} weight="fill" />
-              <span className="text-sm">{event._count?.event_access || 0} attending</span>
+            <div>
+              <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200 leading-none">
+                {event._count?.event_access || 0} attending
+              </p>
             </div>
           </div>
-          <span className="text-sm text-neutral-500">
-            {formatDate(event.date)}
-          </span>
+
+          {/* CTA button — dark pill like "Read More" in reference */}
+          <Button className="bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-sm font-semibold px-4 py-2 rounded-full hover:bg-neutral-700 dark:hover:bg-neutral-200 transition-colors">
+            View
+          </Button>
         </div>
       </div>
     </div>
