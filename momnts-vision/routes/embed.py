@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Body
 from services.detector import download_image, EMBEDDING_MODEL, validate_url
 from deepface import DeepFace
 import os
+import asyncio
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ async def get_embedding(selfie_url: str = Body(..., embed=True)):
         if not validate_url(selfie_url):
             raise HTTPException(status_code=400, detail="Invalid image URL")
 
-        tmp_path = download_image(selfie_url)
+        tmp_path = await asyncio.to_thread(download_image, selfie_url)
         print(f"[EMBED] Image downloaded to: {tmp_path}")
 
         # For selfie validation we use ONLY retinaface — it has the lowest
@@ -28,7 +29,8 @@ async def get_embedding(selfie_url: str = Body(..., embed=True)):
         # images without clear faces.
         try:
             print(f"[EMBED] Trying detector: retinaface")
-            results = DeepFace.represent(
+            results = await asyncio.to_thread(
+                DeepFace.represent,
                 img_path=tmp_path,
                 model_name=EMBEDDING_MODEL,
                 detector_backend="retinaface",
@@ -50,6 +52,13 @@ async def get_embedding(selfie_url: str = Body(..., embed=True)):
             raise HTTPException(
                 status_code=400,
                 detail="No face detected. Please upload a clear photo of your face."
+            )
+
+        if len(results) > 1:
+            print(f"[EMBED] Multiple faces detected ({len(results)}) — rejecting image")
+            raise HTTPException(
+                status_code=400,
+                detail="Multiple faces detected. Please upload a photo with only your face."
             )
 
         embedding = results[0].get("embedding", [])

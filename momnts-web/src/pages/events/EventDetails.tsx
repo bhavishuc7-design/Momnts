@@ -72,11 +72,7 @@ const EventDetails = () => {
         // Refetch "Your Photos" tab data so it's ready when user switches
         if (eventId) {
           photosApi.getMyPhotos(eventId).then(response => {
-            setMyPhotos(prev => {
-              const prevIds = new Set(prev.map(p => p.id))
-              const newPhotos = response.data.filter((p: PhotoData) => !prevIds.has(p.id))
-              return [...prev, ...newPhotos]
-            })
+            setMyPhotos(response.data)
             setMyPhotosPrompt(response.prompt)
           }).catch(console.error)
         }
@@ -401,7 +397,6 @@ const EventDetails = () => {
             navigate('/events')
           } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to leave event')
-            throw error
           }
         }}
       />
@@ -458,7 +453,6 @@ const EventDetails = () => {
             navigate('/events')
           } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to delete event')
-            throw error
           }
         }}
       />

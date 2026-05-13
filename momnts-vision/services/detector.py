@@ -110,16 +110,23 @@ def detect_faces(image_url: str) -> List[DetectedFace]:
                 # (enforce_detection=False fallback)
                 real_faces = []
                 if raw_results:
+                    import cv2
+                    img_shape = cv2.imread(tmp_path).shape
+                    img_h, img_w = img_shape[0], img_shape[1]
                     for r in raw_results:
                         conf = r.get("face_confidence", 0.0)
                         area = r.get("facial_area", {})
                         # If confidence is 0.0 AND bbox is basically the whole image, it's a fallback
-                        is_fallback = conf == 0.0 and area.get("x") == 0 and area.get("y") == 0
+                        is_fallback = (conf == 0.0 and 
+                                       area.get("x") == 0 and 
+                                       area.get("y") == 0 and 
+                                       area.get("w") == img_w and 
+                                       area.get("h") == img_h)
                         if not is_fallback:
                             real_faces.append(r)
                 
                 if real_faces:
-                    results = raw_results
+                    results = real_faces
                     print(f"[DETECT] Successfully got {len(real_faces)} real face(s) with {detector}")
                     break
                 else:
@@ -214,7 +221,7 @@ def embed_selfie(selfie_url: str) -> List[float]:
             raise ValueError("No face detected in the selfie. Please upload a clear photo of your face.")
         except Exception as e:
             print(f"[EMBED_SELFIE] retinaface error: {str(e)}")
-            raise ValueError(f"Face processing failed: {str(e)}")
+            raise RuntimeError(f"Face processing failed: {str(e)}")
 
         if not results:
             raise ValueError("No face detected in the selfie. Please upload a clear photo of your face.")
