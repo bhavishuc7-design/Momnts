@@ -103,34 +103,16 @@ def detect_faces(image_url: str) -> List[DetectedFace]:
                     img_path=tmp_path,
                     model_name=EMBEDDING_MODEL,
                     detector_backend=detector,
-                    enforce_detection=False,
+                    enforce_detection=True,
                 )
                 
-                # Check if this detector actually found a face or just returned the whole image
-                # (enforce_detection=False fallback)
-                real_faces = []
                 if raw_results:
-                    import cv2
-                    img_shape = cv2.imread(tmp_path).shape
-                    img_h, img_w = img_shape[0], img_shape[1]
-                    for r in raw_results:
-                        conf = r.get("face_confidence", 0.0)
-                        area = r.get("facial_area", {})
-                        # If confidence is 0.0 AND bbox is basically the whole image, it's a fallback
-                        is_fallback = (conf == 0.0 and 
-                                       area.get("x") == 0 and 
-                                       area.get("y") == 0 and 
-                                       area.get("w") == img_w and 
-                                       area.get("h") == img_h)
-                        if not is_fallback:
-                            real_faces.append(r)
-                
-                if real_faces:
-                    results = real_faces
-                    print(f"[DETECT] Successfully got {len(real_faces)} real face(s) with {detector}")
+                    results = raw_results
+                    print(f"[DETECT] Successfully got {len(results)} real face(s) with {detector}")
                     break
-                else:
-                    print(f"[DETECT] Detector {detector} returned only fallbacks/no faces")
+            except ValueError as ve:
+                print(f"[DETECT] Detector {detector} found no faces (ValueError): {str(ve)}")
+                continue
             except Exception as e:
                 print(f"[DETECT] Detector {detector} failed: {str(e)}")
                 continue
