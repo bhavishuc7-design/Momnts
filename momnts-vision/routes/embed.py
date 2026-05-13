@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Body
-from services.detector import download_image, EMBEDDING_MODEL, DETECTOR_BACKEND, validate_url
+from services.detector import download_image, EMBEDDING_MODEL, validate_url
 from deepface import DeepFace
 import os
-from typing import List
+import asyncio
 
 router = APIRouter()
 
@@ -11,86 +11,73 @@ async def get_embedding(selfie_url: str = Body(..., embed=True)):
     """
     Generates a face embedding for a selfie URL.
     Returns a list of 512 floats (ArcFace).
+
+    Uses enforce_detection=True so DeepFace raises a ValueError when no real
+    face is found — no fallback embeddings, no false positives.
     """
     tmp_path = None
     try:
         if not validate_url(selfie_url):
             raise HTTPException(status_code=400, detail="Invalid image URL")
-            
-        tmp_path = download_image(selfie_url)
-        print(f"[DEBUG] Image downloaded to: {tmp_path}")
-        
-        # Try RetinaFace first (more accurate), then fallback to MTCNN if needed
-        detector_backends = ["retinaface", "mtcnn", "opencv"]
-        results = None
-        last_error = None
-        
-        for detector in detector_backends:
-            try:
-                print(f"[DEBUG] Trying detector: {detector}")
-                results = DeepFace.represent(
-                    img_path=tmp_path,
-                    model_name=EMBEDDING_MODEL,
-                    detector_backend=detector,
-                    enforce_detection=False
-                )
-                print(f"[DEBUG] Detector {detector} returned {len(results) if results else 0} faces")
-                if results and len(results) > 0:
-                    print(f"[DEBUG] Successfully detected face with {detector}")
-                    break
-            except Exception as e:
-                print(f"[DEBUG] Detector {detector} failed: {str(e)}")
-                last_error = e
-                continue
-        
-        if not results or len(results) == 0:
-            raise HTTPException(status_code=400, detail="No face detected in the selfie. Please upload a clear photo.")
 
-        # DeepFace with enforce_detection=False might return a result with very low confidence
-        # We check the face_confidence if available
-        first_face = results[0]
-        confidence = first_face.get("face_confidence", 0)
-        facial_area = first_face.get("facial_area", {})
-        embedding = first_face.get("embedding", [])
-        print(f"[DEBUG] Face confidence: {confidence}, facial_area: {facial_area}, embedding length: {len(embedding)}")
+        tmp_path = await asyncio.to_thread(download_image, selfie_url)
+        print(f"[EMBED] Image downloaded to: {tmp_path}")
 
-        # Check if we have a valid face:
-        # 1. Must have embedding data (512-dim vector)
-        # 2. Must have valid bounding box (not all zeros)
-        # 3. Confidence check: if confidence is 0, we rely on the other checks
-        #    (some detectors like RetinaFace return 0.0 even for valid faces)
-        has_valid_bbox = facial_area and facial_area.get("w", 0) > 0 and facial_area.get("h", 0) > 0
-        has_embedding = len(embedding) > 0
+        # For selfie validation we use ONLY retinaface — it has the lowest
+        # false-positive rate. yunet, opencv and ssd often find "faces" in 
+        # clouds or textures. enforce_detection=True ensures we reject 
+        # images without clear faces.
+        try:
+            print(f"[EMBED] Trying detector: retinaface")
+            results = await asyncio.to_thread(
+                DeepFace.represent,
+                img_path=tmp_path,
+                model_name=EMBEDDING_MODEL,
+                detector_backend="retinaface",
+                enforce_detection=True,
+            )
+            print(f"[EMBED] retinaface found {len(results)} face(s)")
+        except ValueError:
+            print(f"[EMBED] retinaface: no face detected — rejecting image")
+            raise HTTPException(
+                status_code=400,
+                detail="No face detected. Please upload a clear photo of your face."
+            )
+        except Exception as e:
+            print(f"[EMBED] retinaface error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Face processing failed. Please try again.")
 
-        MIN_CONFIDENCE = 0.15
-        if confidence > 0 and confidence < MIN_CONFIDENCE:
-            print(f"[DEBUG] Face confidence {confidence} below threshold {MIN_CONFIDENCE}")
+        if not results:
+            print(f"[EMBED] All detectors found no face — rejecting image")
             raise HTTPException(
                 status_code=400,
                 detail="No face detected. Please upload a clear photo of your face."
             )
 
-        if not has_embedding:
-            print(f"[DEBUG] No embedding data found")
+        if len(results) > 1:
+            print(f"[EMBED] Multiple faces detected ({len(results)}) — rejecting image")
+            raise HTTPException(
+                status_code=400,
+                detail="Multiple faces detected. Please upload a photo with only your face."
+            )
+
+        embedding = results[0].get("embedding", [])
+        if not embedding:
             raise HTTPException(
                 status_code=400,
                 detail="Could not extract face features. Please upload a clearer photo."
             )
 
-        if not has_valid_bbox:
-            print(f"[DEBUG] No valid bounding box found")
-            raise HTTPException(
-                status_code=400,
-                detail="Could not locate face in image. Please upload a photo with a clear face."
-            )
+        facial_area = results[0].get("facial_area", {})
+        confidence = results[0].get("face_confidence", 0.0)
+        print(f"[EMBED] Face accepted — confidence: {confidence:.3f}, bbox: {facial_area}, embedding_len: {len(embedding)}")
 
-        print(f"[DEBUG] Face validated - confidence: {confidence}, has_embedding: {has_embedding}, has_bbox: {has_valid_bbox}")
         return {"embedding": embedding}
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Embedding error: {str(e)}")
+        print(f"[EMBED] Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail="Face processing failed. Please try again with a clearer photo.")
     finally:
         if tmp_path and os.path.exists(tmp_path):

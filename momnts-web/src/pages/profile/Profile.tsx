@@ -308,7 +308,7 @@ const Profile = () => {
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <p className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{user.username}</p>
+                      <p className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 capitalize">{user.username}</p>
                       <button
                         onClick={handleStartEditingName}
                         className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 dark:hover:text-neutral-300 transition-colors cursor-pointer"

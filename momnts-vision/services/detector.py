@@ -93,22 +93,44 @@ def detect_faces(image_url: str) -> List[DetectedFace]:
 
         # Try multiple detector backends in sequence
         # Some detectors work better for different image types
-        detector_backends = ["retinaface", "mtcnn", "opencv", "ssd"]
+        detector_backends = ["retinaface"]
         results = None
         
         for detector in detector_backends:
             try:
                 print(f"[DETECT] Trying detector: {detector}")
-                results = DeepFace.represent(
+                raw_results = DeepFace.represent(
                     img_path=tmp_path,
                     model_name=EMBEDDING_MODEL,
                     detector_backend=detector,
                     enforce_detection=False,
                 )
-                print(f"[DETECT] Detector {detector} returned {len(results) if results else 0} raw results")
-                if results and len(results) > 0:
-                    print(f"[DETECT] Successfully got results with {detector}")
+                
+                # Check if this detector actually found a face or just returned the whole image
+                # (enforce_detection=False fallback)
+                real_faces = []
+                if raw_results:
+                    import cv2
+                    img_shape = cv2.imread(tmp_path).shape
+                    img_h, img_w = img_shape[0], img_shape[1]
+                    for r in raw_results:
+                        conf = r.get("face_confidence", 0.0)
+                        area = r.get("facial_area", {})
+                        # If confidence is 0.0 AND bbox is basically the whole image, it's a fallback
+                        is_fallback = (conf == 0.0 and 
+                                       area.get("x") == 0 and 
+                                       area.get("y") == 0 and 
+                                       area.get("w") == img_w and 
+                                       area.get("h") == img_h)
+                        if not is_fallback:
+                            real_faces.append(r)
+                
+                if real_faces:
+                    results = real_faces
+                    print(f"[DETECT] Successfully got {len(real_faces)} real face(s) with {detector}")
                     break
+                else:
+                    print(f"[DETECT] Detector {detector} returned only fallbacks/no faces")
             except Exception as e:
                 print(f"[DETECT] Detector {detector} failed: {str(e)}")
                 continue
@@ -142,10 +164,13 @@ def detect_faces(image_url: str) -> List[DetectedFace]:
             has_valid_bbox = bbox.w > 0 and bbox.h > 0
             has_embedding = len(embedding) > 0
 
-            # Only reject if confidence is > 0 but below threshold
+            # For group/event photos, RetinaFace commonly returns confidence=0.0
+            # for legitimate detected faces. We cannot hard-reject 0.0 here the
+            # way we do for selfies (where 0.0 means whole-image fallback with no face).
+            # Instead: reject only if confidence is a positive but low value.
             MIN_CONFIDENCE = 0.15
             if confidence > 0 and confidence < MIN_CONFIDENCE:
-                print(f"[DETECT] Face {idx}: Skipping - confidence {confidence} below threshold {MIN_CONFIDENCE}")
+                print(f"[DETECT] Face {idx}: Skipping - confidence {confidence:.3f} below threshold {MIN_CONFIDENCE}")
                 continue
             if not has_embedding:
                 print(f"[DETECT] Face {idx}: Skipping - no embedding data")
@@ -172,6 +197,7 @@ def embed_selfie(selfie_url: str) -> List[float]:
     """
     Generates an embedding for a single face (selfie).
     Used in the /match endpoint to get the attendee's face vector.
+    Uses enforce_detection=True so non-face images are hard-rejected.
     """
     tmp_path = None
     try:
@@ -179,17 +205,27 @@ def embed_selfie(selfie_url: str) -> List[float]:
             raise ValueError("Selfie URL is not from an allowed domain")
         tmp_path = download_image(selfie_url)
 
-        results = DeepFace.represent(
-            img_path=tmp_path,
-            model_name=EMBEDDING_MODEL,
-            detector_backend=DETECTOR_BACKEND,
-            enforce_detection=False,
-        )
+        # For selfie validation we use ONLY retinaface — it has the lowest
+        # false-positive rate. enforce_detection=True ensures we reject
+        # images without clear faces.
+        try:
+            results = DeepFace.represent(
+                img_path=tmp_path,
+                model_name=EMBEDDING_MODEL,
+                detector_backend="retinaface",
+                enforce_detection=True,
+            )
+            print(f"[EMBED_SELFIE] retinaface found {len(results)} face(s)")
+        except ValueError:
+            print(f"[EMBED_SELFIE] retinaface: no face detected — rejecting image")
+            raise ValueError("No face detected in the selfie. Please upload a clear photo of your face.")
+        except Exception as e:
+            print(f"[EMBED_SELFIE] retinaface error: {str(e)}")
+            raise RuntimeError(f"Face processing failed: {str(e)}")
 
         if not results:
-            raise ValueError("No face detected in the selfie")
+            raise ValueError("No face detected in the selfie. Please upload a clear photo of your face.")
 
-        # For a selfie we only care about the first (most prominent) face
         return results[0]["embedding"]
 
     finally:

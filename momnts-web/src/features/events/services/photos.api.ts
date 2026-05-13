@@ -81,38 +81,71 @@ export const photosApi = {
   ): Promise<UploadResponse> {
     const results: PhotoData[] = []
     const errors: Array<{ index: number; error: Error }> = []
+    const BATCH_SIZE = 5 // Reduced to 5 to prevent server overload
+    const TIMEOUT_MS = 120000 // 2 minutes timeout per batch
 
-    // Upload files one by one to track individual progress
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
+    // Helper to upload a batch of files in a single request with timeout
+    const uploadBatch = async (batchFiles: File[], startIndex: number): Promise<PhotoData[]> => {
       const formData = new FormData()
-      formData.append('photos', file)
+      batchFiles.forEach(file => {
+        formData.append('photos', file)
+      })
 
       try {
+        // Use AbortController for timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
         const response = await fetch(`${API_URL}/api/photos/${eventId}/upload`, {
           method: 'POST',
           body: formData,
           credentials: 'include',
+          signal: controller.signal,
         })
+
+        clearTimeout(timeoutId)
 
         if (!response.ok) {
           const errorData = await response.json()
-          throw new Error(errorData.message || 'Failed to upload photo')
+          throw new Error(errorData.message || 'Failed to upload photos')
         }
 
         const data = await response.json()
-        const photo = data.photos?.[0]
+        const uploadedPhotos = data.photos || []
 
-        if (photo) {
-          results.push(photo)
-          onFileComplete?.(i, photo)
-        }
+        // Mark each file as completed
+        uploadedPhotos.forEach((photo: PhotoData, idx: number) => {
+          onFileComplete?.(startIndex + idx, photo)
+        })
+
+        return uploadedPhotos
       } catch (error) {
-        const err = error instanceof Error ? error : new Error('Failed to upload photo')
-        errors.push({ index: i, error: err })
-        onFileError?.(i, err)
+        const err = error instanceof Error ? error : new Error('Failed to upload photos')
+        if (err.name === 'AbortError') {
+          err.message = 'Upload timeout - please try with fewer photos'
+        }
+        // Mark all files in batch as error
+        batchFiles.forEach((_, idx) => {
+          errors.push({ index: startIndex + idx, error: err })
+          onFileError?.(startIndex + idx, err)
+        })
+        return []
       }
     }
+
+    // Upload files in batches sequentially to avoid overwhelming the server
+    const uploadBatches = async () => {
+      const batchResults: PhotoData[] = []
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE)
+        const batchPhotos = await uploadBatch(batch, i)
+        batchResults.push(...batchPhotos)
+      }
+      return batchResults
+    }
+
+    const uploadedPhotos = await uploadBatches()
+    results.push(...uploadedPhotos)
 
     if (results.length === 0 && errors.length > 0) {
       throw errors[0].error

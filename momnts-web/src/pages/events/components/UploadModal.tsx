@@ -1,6 +1,7 @@
 import { Button } from '../../../components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog'
 import { CloudArrowUp, X as XIcon, Check, Spinner } from '@phosphor-icons/react'
+import { useState } from 'react'
 
 export type FileUploadStatus = 'pending' | 'uploading' | 'completed' | 'error'
 
@@ -25,6 +26,38 @@ const UploadModal = ({
   uploading,
   fileStatuses
 }: UploadModalProps) => {
+  const [isDragOver, setIsDragOver] = useState(false)
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+
+    const droppedFiles = Array.from(e.dataTransfer.files)
+    const imageFiles = droppedFiles.filter(file => file.type.startsWith('image/'))
+
+    if (imageFiles.length > 0) {
+      // Create a synthetic event object
+      const syntheticEvent = {
+        target: {
+          files: imageFiles
+        }
+      } as unknown as React.ChangeEvent<HTMLInputElement>
+      onFileSelect(syntheticEvent)
+    }
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -45,12 +78,23 @@ const UploadModal = ({
             id="photo-upload"
           />
           <label htmlFor="photo-upload">
-            <div className="border-2 border-dashed border-neutral-300 dark:border-neutral-700 rounded-xl p-8 text-center cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors">
-              <CloudArrowUp size={48} className="mx-auto text-neutral-400 mb-4" />
+            <div
+              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                isDragOver
+                  ? 'border-primary bg-primary/5 dark:bg-primary/10'
+                  : 'border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <CloudArrowUp size={48} className={`mx-auto mb-4 ${isDragOver ? 'text-primary' : 'text-neutral-400'}`} />
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 {selectedFiles.length > 0
                   ? `${selectedFiles.length} file(s) selected`
-                  : 'Click to select photos or drag and drop'}
+                  : isDragOver
+                    ? 'Drop photos here'
+                    : 'Click to select photos or drag and drop'}
               </p>
             </div>
           </label>
