@@ -8,7 +8,10 @@ import { matchingQueue } from '../lib/queue.js'
 import { publishPhotoProcessed } from '../lib/publisher.js'
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SERVICE_URL!
-const SIMILARITY_THRESHOLD = 0.75
+// Threshold for deduplicating face profiles within an event.
+// Aligned with the match.worker threshold (0.55) — same-person ArcFace
+// cosine similarity across different photos is typically 0.65–0.78.
+const SIMILARITY_THRESHOLD = 0.55
 
 // Worker listens to the photo-processing queue
 // and processes one job at a time

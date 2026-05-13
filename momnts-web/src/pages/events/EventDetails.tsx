@@ -72,7 +72,11 @@ const EventDetails = () => {
         // Refetch "Your Photos" tab data so it's ready when user switches
         if (eventId) {
           photosApi.getMyPhotos(eventId).then(response => {
-            setMyPhotos(response.data)
+            setMyPhotos(prev => {
+              const prevIds = new Set(prev.map(p => p.id))
+              const newPhotos = response.data.filter((p: PhotoData) => !prevIds.has(p.id))
+              return [...prev, ...newPhotos]
+            })
             setMyPhotosPrompt(response.prompt)
           }).catch(console.error)
         }
@@ -155,13 +159,10 @@ const EventDetails = () => {
     fetchPhotosForTab(activeTab)
   }, [activeTab, fetchPhotosForTab])
 
-  const filteredPhotos = photos.filter((photo) => {
+  const filteredPhotos = activeTab === 'your-photos' ? myPhotos : photos.filter((photo) => {
     switch (activeTab) {
       case 'your-uploads':
         return photo.user_id === user?.id || photo.user?.id === user?.id
-      case 'your-photos':
-        // Use the matched photos from API
-        return myPhotos.some(myPhoto => myPhoto.id === photo.id)
       case 'all':
       default:
         return true
@@ -171,7 +172,8 @@ const EventDetails = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length > 0) {
-      setSelectedFiles(files)
+      setSelectedFiles(prev => [...prev, ...files])
+      setFileStatuses(prev => [...prev, ...files.map((): FileUploadStatus => 'pending')])
     }
   }
 
@@ -439,6 +441,26 @@ const EventDetails = () => {
         onOpenChange={setAttendeesModalOpen}
         attendees={attendees}
         loading={attendeesLoading}
+      />
+
+      <EventSettingsModal
+        open={settingsModalOpen}
+        onOpenChange={setSettingsModalOpen}
+        settingsForm={settingsForm}
+        onSettingsFormChange={setSettingsForm}
+        onSave={handleSaveSettings}
+        saving={savingSettings}
+        onDelete={async () => {
+          if (!eventId) return
+          try {
+            await eventsApi.deleteEvent(eventId)
+            toast.success('Event deleted successfully')
+            navigate('/events')
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete event')
+            throw error
+          }
+        }}
       />
 
       <PhotoCarousel

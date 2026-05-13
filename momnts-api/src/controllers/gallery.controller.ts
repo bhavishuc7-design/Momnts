@@ -106,6 +106,7 @@ export async function getMyPhotosController(req: AuthRequest, res: Response) {
         seenIds.add(p.id)
         return eventAccess.role === 'ORGANIZER' || p.is_visible
       })
+      .sort((a, b) => new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime())
 
     return res.status(200).json({ 
       data: photos, 

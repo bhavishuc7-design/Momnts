@@ -332,7 +332,7 @@ const EventHeader = ({
         <AlertDialogHeader>
           <AlertDialogTitle className="text-red-600">Leave Event</AlertDialogTitle>
           <AlertDialogDescription>
-            This will remove you from <span className="font-semibold text-neutral-900 dark:text-neutral-100">{event?.name}</span>. All photos you uploaded will be permanently deleted and your face matches will be cleared. This cannot be undone.
+            This will remove you from <span className="font-semibold text-neutral-900 dark:text-neutral-100 capitalize">{event?.name}</span>. All photos you uploaded will be permanently deleted and your face matches will be cleared. This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

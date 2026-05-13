@@ -5,6 +5,7 @@ import sharp from 'sharp'
 import axios from 'axios'
 import type { AuthRequest } from '../middleware/auth.middleware.js'
 import { unlink } from 'fs/promises'
+import { matchingQueue } from '../lib/queue.js'
 
 /**
  * Updates the user's selfie.
@@ -22,41 +23,30 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
       return res.status(400).json({ message: "No selfie uploaded" })
     }
 
-    // 1. Fetch existing selfie URL to delete from R2 later
+    // 1. Fetch existing selfie URL — we'll delete it from R2 only AFTER the new
+    //    one is fully validated and saved, so a failed update never corrupts state.
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
       select: { selfie_url: true }
     })
     const oldSelfieUrl = existingUser?.selfie_url
 
-    // 2. Compress selfie (800x800 jpeg 90)
+    // 2. Compress new selfie (800x800 jpeg 90)
     const compressedSelfie = await sharp(req.file.path)
       .resize(800, 800, { fit: 'inside' })
       .jpeg({ quality: 90 })
       .toBuffer()
 
-    // Clean up temp file
-    await unlink(req.file.path).catch(() => {})
+    await unlink(req.file.path).catch(() => { })
 
-    // 3. Delete old selfie from R2 if it exists
-    if (oldSelfieUrl) {
-      try {
-        const oldKey = extractKeyFromUrl(oldSelfieUrl)
-        await deleteFromR2(oldKey)
-        console.log(`Deleted old selfie from R2: ${oldKey}`)
-      } catch (error) {
-        console.error('Failed to delete old selfie from R2:', error)
-        // Continue even if delete fails - don't block the update
-      }
-    }
-
-    // 4. Upload new selfie to R2 with unique key (timestamp prevents CDN cache)
+    // 3. Upload new selfie to R2
     const r2Key = `selfies/${userId}/selfie-${Date.now()}.jpg`
     const selfieUrl = await uploadToR2(r2Key, compressedSelfie, 'image/jpeg')
 
-    // 4. Call Python /embed → get new embedding
+    // 4. Validate face with Python /embed.
+    //    If this fails, delete the new upload and leave old selfie untouched.
     const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || 'http://localhost:8000'
-    
+
     let embedding: number[]
     try {
       const response = await axios.post(`${pythonServiceUrl}/embed`, {
@@ -65,17 +55,21 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
       embedding = response.data.embedding
     } catch (error: any) {
       console.error('Vision service error during update:', error.response?.data || error.message)
+
+      // Delete the new (rejected) upload — old selfie in R2 and DB is unaffected
+      try { await deleteFromR2(r2Key) } catch { }
+
       if (error.response?.status === 400) {
-        return res.status(400).json({ 
-          message: "No face detected. Please upload a clear photo of your face." 
+        return res.status(400).json({
+          message: error.response?.data?.detail || "No face detected. Please upload a clear photo of your face."
         })
       }
-      return res.status(500).json({ 
-        message: "Face processing failed. Please try again." 
+      return res.status(500).json({
+        message: "Face processing failed. Please try again."
       })
     }
 
-    // 5. Update User in DB with new selfie_url and selfie_embedding
+    // 5. Save new selfie URL + embedding to DB
     const vectorString = `[${embedding.join(',')}]`
     await prisma.$executeRaw`
       UPDATE "User"
@@ -84,14 +78,33 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
       WHERE id = ${userId}
     `
 
-    // 6. Unclaim all previously claimed FaceProfiles (old selfie matches are stale)
-    await prisma.faceProfile.updateMany({
-      where: { claimed_by: userId },
-      data: { claimed_by: null, is_claimed: false }
-    })
+    // 6. NOW safe to delete old selfie from R2 (DB already points to new one)
+    if (oldSelfieUrl) {
+      try {
+        await deleteFromR2(extractKeyFromUrl(oldSelfieUrl))
+        console.log(`[UPDATE_SELFIE] Deleted old selfie from R2: ${oldSelfieUrl}`)
+      } catch (err) {
+        console.error('[UPDATE_SELFIE] Failed to delete old selfie from R2 (non-fatal):', err)
+      }
+    }
 
-    // 7. Return 200
-    // Note: matching will run automatically when user creates or joins new events
+    // 7. Enqueue matching for all events — scan ALL unclaimed FaceProfiles to re-match
+    //    with new embedding. Already-claimed profiles are never touched (is_claimed=false filter),
+    //    so "Your Photos" history is preserved.
+    const matchOnlyAfter = undefined
+    try {
+      const userEvents = await prisma.eventAccess.findMany({
+        where: { user_id: userId },
+        select: { event_id: true },
+      })
+      for (const { event_id } of userEvents) {
+        await matchingQueue.add('match-user', { userId, eventId: event_id, matchOnlyAfter })
+        console.log(`[UPDATE_SELFIE] Enqueued match job for event ${event_id} (after ${matchOnlyAfter})`)
+      }
+    } catch (queueErr) {
+      console.error('[UPDATE_SELFIE] Failed to enqueue match jobs:', queueErr)
+    }
+
     return res.status(200).json({
       message: "Selfie updated successfully",
       selfie_url: selfieUrl
