@@ -188,8 +188,8 @@ const Profile = () => {
                   <CircleNotch size={14} weight="bold" className="animate-spin" />
                 ) : (
                   <Tooltip>
-                    <TooltipTrigger delay={0}>
-                  <CameraPlus size={14} weight="bold" />
+                    <TooltipTrigger delay={0} render={<span />}>
+                     <CameraPlus size={14} weight="bold" />
                   </TooltipTrigger>
                   <TooltipContent className="cursor-pointer">
                     Update photo
