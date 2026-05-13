@@ -187,7 +187,14 @@ const Profile = () => {
                 {isUpdatingSelfie ? (
                   <CircleNotch size={14} weight="bold" className="animate-spin" />
                 ) : (
+                  <Tooltip>
+                    <TooltipTrigger delay={0}>
                   <CameraPlus size={14} weight="bold" />
+                  </TooltipTrigger>
+                  <TooltipContent className="cursor-pointer">
+                    Update photo
+                  </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
             </button>
@@ -230,11 +237,11 @@ const Profile = () => {
             className="hidden" 
           />
 
-          <div className="hidden md:block pt-4 ">
+          <div className="hidden md:flex pt-4 w-full items-center justify-start">
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-2xl h-12">
-                  <SignOut size={20} weight="bold" className="mr-3" />
+                <Button variant="ghost" className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-2xl h-12 flex items-center justify-center gap-2">
+                  <SignOut size={20} weight="bold" />
                   Logout Session
                 </Button>
               </AlertDialogTrigger>
