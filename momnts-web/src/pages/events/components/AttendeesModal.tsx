@@ -8,6 +8,7 @@ import {
 import { Users, CloudArrowUp, User, Crown } from "@phosphor-icons/react"
 import { Skeleton } from "../../../components/ui/skeleton"
 import { Badge } from "../../../components/ui/badge"
+import { Button } from "../../../components/ui/button"
 
 interface AttendeeData {
   id: string
@@ -28,9 +29,11 @@ interface AttendeesModalProps {
   onOpenChange: (open: boolean) => void
   attendees: AttendeeData[]
   loading: boolean
+  onSelectAttendee?: (userId: string) => void
+  isOrganizer?: boolean
 }
 
-const AttendeesModal = ({ open, onOpenChange, attendees, loading }: AttendeesModalProps) => {
+const AttendeesModal = ({ open, onOpenChange, attendees, loading, onSelectAttendee, isOrganizer }: AttendeesModalProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -99,12 +102,19 @@ const AttendeesModal = ({ open, onOpenChange, attendees, loading }: AttendeesMod
                   </div>
                 </div>
                 
-                <div className="flex flex-col items-end">
-                  <div className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400">
-                    <CloudArrowUp size={16} weight="fill" />
-                    <span className="text-sm font-medium">{attendee.upload_count}</span>
+                <div className="flex flex-col items-end gap-2">
+                  <div className="flex flex-col items-end">
+                    <div className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-400">
+                      <CloudArrowUp size={16} weight="fill" />
+                      <span className="text-sm font-medium">{attendee.upload_count}</span>
+                    </div>
+                    <p className="text-[10px] text-neutral-400 uppercase tracking-tighter font-bold">Photos</p>
                   </div>
-                  <p className="text-[10px] text-neutral-400 uppercase tracking-tighter font-bold">Photos</p>
+                  {isOrganizer && attendee.upload_count > 0 && onSelectAttendee && (
+                    <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => onSelectAttendee(attendee.user_id)}>
+                      View Photos
+                    </Button>
+                  )}
                 </div>
               </div>
             ))

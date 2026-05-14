@@ -72,10 +72,16 @@ async function createEventController(req: AuthRequest, res: Response) {
             WHERE id = ${req.user.id} AND selfie_embedding IS NOT NULL
         `
         if (users.length > 0) {
-            await matchingQueue.add('match-user', {
-                userId: req.user.id,
-                eventId: event.id,
-            })
+            await matchingQueue.add(
+                'match-user',
+                {
+                    userId: req.user.id,
+                    eventId: event.id,
+                },
+                {
+                    jobId: `match-${event.id}-${req.user.id}-${Date.now()}`
+                }
+            )
         }
 
         return res.status(201).json({
@@ -221,7 +227,7 @@ async function joinEventController(req: AuthRequest, res: Response) {
                     eventId: event.id,
                 },
                 {
-                    jobId: `match-${event.id}-${req.user.id}`,
+                    jobId: `match-${event.id}-${req.user.id}-${Date.now()}`,
                 }
             )
         }

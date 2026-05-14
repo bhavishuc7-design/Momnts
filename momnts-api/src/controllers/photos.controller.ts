@@ -58,28 +58,24 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
                         user_id: userId,
                     }
                 },
-                select: { upload_count: true, role: true }
+                select: { role: true }
             })
             if (!current) throw new Error('Event access not found')
+
+            // Count actual photos in DB (not the drifting upload_count field)
+            const actualCount = await tx.photo.count({
+                where: { event_id: eventId, user_id: userId }
+            })
 
             // Enforce limit for attendees only
             if (current.role === 'ATTENDEE') {
                 const limit = eventAccess.event.attendee_upload_limit
-                if (current.upload_count + files.length > limit) {
-                    return { success: false, current: current.upload_count, limit, role: current.role }
+                if (actualCount + files.length > limit) {
+                    return { success: false, current: actualCount, limit, role: current.role }
                 }
             }
 
-            await tx.eventAccess.update({
-                where: {
-                    event_id_user_id: {
-                        event_id: eventId,
-                        user_id: userId,
-                    }
-                },
-                data: { upload_count: { increment: files.length } }
-            })
-            return { success: true, newCount: current.upload_count + files.length, role: current.role }
+            return { success: true, newCount: actualCount + files.length, role: current.role }
         })
 
         if (!result.success) {
@@ -117,81 +113,111 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
             }
         }
 
-        // Process and upload files in parallel with concurrency limit
-        const uploadedPhotos = []
-        const processedFiles: string[] = []
-        const CONCURRENCY = 5 // Process 5 photos simultaneously
-
-        // Helper to process a single file
-        const processSingleFile = async (file: Express.Multer.File) => {
-            const photoId = crypto.randomUUID()
-            const basePath = `events/${eventId}/${photoId}`
-
-            // Compress image into 3 versions
-            const { thumb, display, original, width, height } = await processImage(file.path)
-
-            // Upload all 3 versions to R2 in parallel
-            const [thumbUrl, displayUrl, originalUrl] = await Promise.all([
-                uploadToR2(`${basePath}/thumb.jpg`, thumb, 'image/jpeg'),
-                uploadToR2(`${basePath}/display.jpg`, display, 'image/jpeg'),
-                uploadToR2(`${basePath}/original.webp`, original, 'image/webp'),
-            ])
-
-            // Save photo record to database
-            const photo = await prisma.photo.create({
-                data: {
-                    id: photoId,
-                    event_id: eventId,
-                    user_id: req.user.id,
-                    thumb_url: thumbUrl,
-                    display_url: displayUrl,
-                    original_url: originalUrl,
-                    width: width || null,
-                    height: height || null,
-                    processed: false,
-                    is_visible: true,
-                }
-            })
-
-            // Add job to queue for face detection
-            await photoQueue.add('detect-faces', {
-                photoId: photo.id,
-                eventId: eventId,
-                displayUrl: displayUrl,
-            })
-
-            return { photo, filePath: file.path }
-        }
-
-        // Process files with concurrency limit
-        const processWithConcurrency = async (files: Express.Multer.File[]) => {
-            const results = []
-            for (let i = 0; i < files.length; i += CONCURRENCY) {
-                const batch = files.slice(i, i + CONCURRENCY)
-                const batchResults = await Promise.all(
-                    batch.map(file => processSingleFile(file))
-                )
-                results.push(...batchResults)
-            }
-            return results
-        }
-
+        // Process and upload files in parallel with compensation logic
+        let results;
+        let uploadedPhotos: any[] = [];
         try {
-            const results = await processWithConcurrency(files)
-            for (const { photo, filePath } of results) {
-                uploadedPhotos.push(photo)
-                processedFiles.push(filePath)
+            const uploadPromises = files.map(async (file) => {
+                const photoId = crypto.randomUUID()
+                const basePath = `events/${eventId}/${photoId}`
+
+                // Compress image into 3 versions
+                const { thumb, display, original, width, height } = await processImage(file.path)
+
+                // Upload all 3 versions to R2 with compensation tracking
+                const uploadResults = await Promise.allSettled([
+                    uploadToR2(`${basePath}/thumb.webp`, thumb, 'image/webp', { cacheControl: 'public, max-age=31536000, immutable' }),
+                    uploadToR2(`${basePath}/display.webp`, display, 'image/webp', { cacheControl: 'public, max-age=31536000, immutable' }),
+                    uploadToR2(`${basePath}/original.webp`, original, 'image/webp', { cacheControl: 'public, max-age=31536000, immutable', contentDisposition: `attachment; filename="${photoId}-original.webp"` }),
+                ])
+
+                const rejected = uploadResults.filter(r => r.status === 'rejected')
+                if (rejected.length > 0) {
+                    const successfulUrls = uploadResults
+                        .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+                        .map(r => r.value)
+                    
+                    if (successfulUrls.length > 0) {
+                        await Promise.allSettled(successfulUrls.map(url => deleteFromR2(extractKeyFromUrl(url))))
+                    }
+                    throw new Error(`Failed to upload one or more variants for ${file.originalname}`)
+                }
+
+                const [thumbUrl, displayUrl, originalUrl] = uploadResults.map((r: any) => r.value)
+                return { photoId, thumbUrl, displayUrl, originalUrl, width, height }
+            })
+
+            const batchResults = await Promise.allSettled(uploadPromises)
+            
+            const anyFailed = batchResults.some(r => r.status === 'rejected')
+            if (anyFailed) {
+                // Compensation: cleanup all files that succeeded in the batch
+                const successfulFiles = batchResults
+                    .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+                    .map(r => r.value)
+                
+                const deletePromises = successfulFiles.flatMap(file => [
+                    deleteFromR2(extractKeyFromUrl(file.thumbUrl)),
+                    deleteFromR2(extractKeyFromUrl(file.displayUrl)),
+                    deleteFromR2(extractKeyFromUrl(file.originalUrl))
+                ])
+
+                if (deletePromises.length > 0) {
+                    await Promise.allSettled(deletePromises)
+                }
+
+                throw new Error('One or more photo uploads failed. All changes reverted.')
             }
+
+            results = batchResults.map((r: any) => r.value)
+
+        uploadedPhotos = await Promise.all(
+            results.map(async ({ photoId, thumbUrl, displayUrl, originalUrl, width, height }) => {
+                const photo = await prisma.photo.create({
+                    data: {
+                        id: photoId,
+                        event_id: eventId,
+                        user_id: req.user!.id,
+                        thumb_url: thumbUrl,
+                        display_url: displayUrl,
+                        original_url: originalUrl,
+                        width: width || null,
+                        height: height || null,
+                        processed: false,
+                        is_visible: true,
+                    }
+                })
+
+                try {
+                    // Add job to queue for face detection
+                    await photoQueue.add('detect-faces', {
+                        photoId: photo.id,
+                        eventId: eventId,
+                        displayUrl: displayUrl,
+                    })
+                } catch (queueError) {
+                    console.error(`Queue failed for photo ${photo.id}, rolling back:`, queueError)
+                    await prisma.photo.delete({ where: { id: photo.id } }).catch(() => {})
+                    await Promise.allSettled([
+                        deleteFromR2(extractKeyFromUrl(thumbUrl)),
+                        deleteFromR2(extractKeyFromUrl(displayUrl)),
+                        deleteFromR2(extractKeyFromUrl(originalUrl))
+                    ])
+                    throw queueError
+                }
+
+                return photo
+            })
+        )
         } finally {
             // Clean up temp files regardless of success or error
-            for (const filePath of processedFiles) {
+            for (const file of files) {
                 try {
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath)
+                    if (fs.existsSync(file.path)) {
+                        fs.unlinkSync(file.path)
                     }
                 } catch (err) {
-                    // Log cleanup error but don't fail the request
-                    console.error(`Failed to delete temp file ${filePath}:`, err)
+                    console.error(`Failed to delete temp file ${file.path}:`, err)
                 }
             }
         }

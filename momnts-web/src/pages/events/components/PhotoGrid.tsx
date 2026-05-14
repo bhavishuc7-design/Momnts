@@ -2,6 +2,7 @@ import { Images } from '@phosphor-icons/react'
 import { PhotoData } from '../../../features/events/services/photos.api'
 import { Skeleton } from '../../../components/ui/skeleton'
 import PhotoCard from './PhotoCard'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface PhotoGridProps {
   photos: PhotoData[]
@@ -9,6 +10,7 @@ interface PhotoGridProps {
   activeTab: string
   event: { user_id?: string } | null
   onPhotoClick: (index: number) => void
+  onDelete: (photoId: string) => void
   isSelectMode: boolean
   selectedPhotoIds: Set<string>
   onToggleSelect: (photoId: string) => void
@@ -24,6 +26,7 @@ const PhotoGrid = ({
   activeTab,
   event,
   onPhotoClick,
+  onDelete,
   isSelectMode,
   selectedPhotoIds,
   onToggleSelect,
@@ -65,20 +68,35 @@ const PhotoGrid = ({
   }
 
   return (
-    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
-      {photos.map((photo) => (
-        <div key={photo.id} className="mb-4 break-inside-avoid">
-          <PhotoCard
-            photo={photo}
-            onClick={() => onPhotoClick(getPhotoIndex(photo.id))}
-            onDelete={() => onDelete(photo.id)}
-            canDelete={userRole === 'ORGANIZER' || (event?.is_active && currentUserId === photo.user_id)}
-            isSelectMode={isSelectMode}
-            isSelected={selectedPhotoIds.has(photo.id)}
-          />
-        </div>
-      ))}
-    </div>
+    <AnimatePresence mode="wait">
+      <motion.div 
+        key={activeTab}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.3 }}
+        className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4"
+      >
+        {photos.map((photo, index) => (
+          <motion.div 
+            key={photo.id} 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3, delay: index * 0.05 }}
+            className="mb-4 break-inside-avoid"
+          >
+            <PhotoCard
+              photo={photo}
+              onClick={() => onPhotoClick(getPhotoIndex(photo.id))}
+              onDelete={() => onDelete(photo.id)}
+              canDelete={userRole === 'ORGANIZER' || (event?.is_active && currentUserId === photo.user_id)}
+              isSelectMode={isSelectMode}
+              isSelected={selectedPhotoIds.has(photo.id)}
+            />
+          </motion.div>
+        ))}
+      </motion.div>
+    </AnimatePresence>
   )
 }
 

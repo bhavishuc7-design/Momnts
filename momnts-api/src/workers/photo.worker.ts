@@ -53,10 +53,8 @@ const worker = new Worker(
         const vectorString = `[${embedding.join(',')}]`
 
         // Search for an existing face profile in this event
-        // that is similar to this embedding using cosine similarity
-        // <=> is the pgvector cosine distance operator
-        // distance of 0.0 = identical, 2.0 = completely different
-        // we convert threshold: similarity 0.6 → distance 0.4
+        // that is similar to this embedding (dedup: one profile per face).
+        // Searches ALL profiles (claimed + unclaimed) to avoid duplicates.
         const existingProfiles = await prisma.$queryRaw<Array<{
           id: string
           distance: number
@@ -157,7 +155,7 @@ const worker = new Worker(
             eventId: eventId,
           },
           {
-            jobId: `match-${eventId}-${user.user_id}`,
+            jobId: `match-${eventId}-${user.user_id}-${Date.now()}`,
           }
         )
         console.log(`  Enqueued matching job for user ${user.user_id}`)

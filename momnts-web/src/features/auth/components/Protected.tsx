@@ -1,4 +1,4 @@
-import { Navigate } from "react-router";
+import { Navigate, useLocation } from "react-router";
 import { useAuth } from "../hooks/useAuth";
 import type { ReactNode } from "react";
 
@@ -8,6 +8,7 @@ interface ProtectedProps {
 
 const Protected = ({ children }: ProtectedProps) => {
     const { loading, user } = useAuth()
+    const location = useLocation()
 
     if (loading) {
         return (<main>
@@ -17,7 +18,8 @@ const Protected = ({ children }: ProtectedProps) => {
         </main>)
     }
     if (!user) {
-        return <Navigate to={'/login'} />
+        const redirectUrl = location.pathname + location.search
+        return <Navigate to={`/login?redirect=${encodeURIComponent(redirectUrl)}`} />
     }
     return <>{children}</>
 }

@@ -14,26 +14,6 @@ interface MatchJobData {
   matchOnlyAfter?: string
 }
 
-/**
- * Computes cosine similarity between two numeric arrays.
- */
-function cosineSimilarity(vecA: number[], vecB: number[]): number {
-  let dotProduct = 0
-  let magA = 0
-  let magB = 0
-
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i]
-    magA += vecA[i] * vecA[i]
-    magB += vecB[i] * vecB[i]
-  }
-
-  magA = Math.sqrt(magA)
-  magB = Math.sqrt(magB)
-
-  if (magA === 0 || magB === 0) return 0
-  return dotProduct / (magA * magB)
-}
 
 /**
  * Background worker to match a specific user's selfie against
@@ -43,90 +23,83 @@ const matchWorker = new Worker(
   'face-matching',
   async (job: Job<MatchJobData>) => {
     const { userId, eventId, matchOnlyAfter } = job.data
-    console.log(`Processing face-matching for user ${userId} in event ${eventId}${matchOnlyAfter ? ` (only profiles after ${matchOnlyAfter})` : ''}`)
+    console.log(`[MATCH] Processing user ${userId} in event ${eventId}${matchOnlyAfter ? ` (after ${matchOnlyAfter})` : ''}`)
 
     try {
-      // 1. Fetch the user's selfie_embedding
-      const users = await prisma.$queryRaw<any[]>`
-        SELECT selfie_embedding::text as embedding_text
-        FROM "User" WHERE id = ${userId}::text
+      // 1. Verify user has a selfie embedding
+      const userCheck = await prisma.$queryRaw<any[]>`
+        SELECT id FROM "User"
+        WHERE id = ${userId} AND selfie_embedding IS NOT NULL
       `
-
-      if (!users.length || !users[0].embedding_text) {
-        console.log(`No selfie embedding found for user ${userId}. Returning early.`)
+      if (!userCheck.length) {
+        console.log(`[MATCH] No selfie embedding for user ${userId}. Skipping.`)
         return
       }
 
-      // Parse pgvector string "[0.1, 0.2, ...]" into float array
-      const userEmbedding = users[0].embedding_text
-        .replace('[', '')
-        .replace(']', '')
-        .split(',')
-        .map(Number)
-
-      // 2. Fetch unclaimed FaceProfiles for this event.
-      //    If matchOnlyAfter is set (selfie UPDATE), only consider profiles
-      //    created after that timestamp — i.e. from photos uploaded post-update.
-      //    Existing claimed profiles are untouched because is_claimed = false filters them out.
-      const profiles = matchOnlyAfter
-        ? await prisma.$queryRaw<any[]>`
-            SELECT id, embedding_vector::text as embedding_text
-            FROM "FaceProfile"
-            WHERE event_id = ${eventId}::text
-              AND is_claimed = false
-              AND created_at > ${new Date(matchOnlyAfter)}
-          `
-        : await prisma.$queryRaw<any[]>`
-            SELECT id, embedding_vector::text as embedding_text
-            FROM "FaceProfile"
-            WHERE event_id = ${eventId}::text AND is_claimed = false
-          `
-
-      if (!profiles.length) {
-        console.log(`No unclaimed face profiles found in event ${eventId}`)
-        return
-      }
-
-      // ArcFace cosine similarity for the same person across different conditions
-      // (selfie vs cropped event photo face) typically scores 0.65–0.78.
-      // 0.80 was rejecting real matches. 0.55 balances recall vs false positives.
+      // 2. Use pgvector native <=> (cosine distance) to compare
+      //    distance = 1 - similarity, so threshold 0.55 → max distance 0.45
       const MATCH_THRESHOLD = 0.55
-      const matchedIds: string[] = []
+      const MAX_DISTANCE = 1 - MATCH_THRESHOLD // 0.45
 
-      // 3. For each profile compute cosine similarity
-      for (const profile of profiles) {
-        const profileEmbedding = profile.embedding_text
-          .replace('[', '')
-          .replace(']', '')
-          .split(',')
-          .map(Number)
+      // Fetch ALL unclaimed profiles with their distance to user's selfie
+      // so we can log everything for debugging
+      const candidates = matchOnlyAfter
+        ? await prisma.$queryRaw<Array<{ id: string; distance: number }>>`
+            SELECT fp.id,
+                   fp.embedding_vector <=> (SELECT selfie_embedding FROM "User" WHERE id = ${userId}) AS distance
+            FROM "FaceProfile" fp
+            WHERE fp.event_id = ${eventId}
+              AND fp.is_claimed = false
+              AND fp.created_at > ${new Date(matchOnlyAfter)}
+            ORDER BY distance ASC
+          `
+        : await prisma.$queryRaw<Array<{ id: string; distance: number }>>`
+            SELECT fp.id,
+                   fp.embedding_vector <=> (SELECT selfie_embedding FROM "User" WHERE id = ${userId}) AS distance
+            FROM "FaceProfile" fp
+            WHERE fp.event_id = ${eventId}
+              AND fp.is_claimed = false
+            ORDER BY distance ASC
+          `
 
-        const similarity = cosineSimilarity(userEmbedding, profileEmbedding)
+      console.log(`[MATCH] Found ${candidates.length} unclaimed profile(s) in event ${eventId}`)
 
-        if (similarity >= MATCH_THRESHOLD) {
-          matchedIds.push(profile.id)
-          console.log(`  Profile ${profile.id} matched with similarity ${similarity.toFixed(4)}`)
-        }
+      if (!candidates.length) {
+        console.log(`[MATCH] No unclaimed profiles to match against.`)
+        return
       }
 
-      // 4. Claim ALL profiles above threshold
+      // Log ALL distances for debugging
+      for (const c of candidates) {
+        const similarity = (1 - Number(c.distance)).toFixed(4)
+        console.log(`[MATCH]   Profile ${c.id}: distance=${Number(c.distance).toFixed(4)}, similarity=${similarity}`)
+      }
+
+      // 3. Filter profiles within threshold
+      const matchedIds = candidates
+        .filter(c => Number(c.distance) <= MAX_DISTANCE)
+        .map(c => c.id)
+
+      // 4. Claim matched profiles
       if (matchedIds.length > 0) {
-        await prisma.faceProfile.updateMany({
-          where: { id: { in: matchedIds } },
+        const result = await prisma.faceProfile.updateMany({
+          where: {
+            id: { in: matchedIds },
+            is_claimed: false, // Guard: only claim if still unclaimed (prevents race condition)
+          },
           data: {
             claimed_by: userId,
             is_claimed: true
           }
         })
+        console.log(`[MATCH] Claimed ${result.count}/${matchedIds.length} profiles (rest were already claimed)`)
 
-        // Count how many distinct photos are linked to the matched profiles
         const matchedPhotos = await prisma.photoFace.findMany({
           where: { face_profile_id: { in: matchedIds } },
           select: { photo_id: true },
           distinct: ['photo_id'],
         })
 
-        // Publish WebSocket event so frontend can show toast
         await publishFaceMatched({
           eventId,
           userId,
@@ -134,13 +107,13 @@ const matchWorker = new Worker(
           matchedProfileIds: matchedIds,
         })
 
-        console.log(`Matched user ${userId} to ${matchedIds.length} FaceProfile(s) in event ${eventId} (${matchedPhotos.length} photos)`)
+        console.log(`[MATCH] ✓ Claimed ${matchedIds.length} profile(s) → ${matchedPhotos.length} photo(s) for user ${userId}`)
       } else {
-        console.log(`No matching face profile found for user ${userId} in event ${eventId}`)
+        console.log(`[MATCH] ✗ No profiles above threshold ${MATCH_THRESHOLD} for user ${userId}`)
       }
 
     } catch (error) {
-      console.error(`Face-matching job failed for user ${userId}:`, error)
+      console.error(`[MATCH] Job failed for user ${userId}:`, error)
       throw error
     }
   },

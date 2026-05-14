@@ -8,6 +8,12 @@ import {
   TooltipTrigger,
 } from "../../../components/ui/tooltip"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -32,9 +38,14 @@ import {
   Selection,
   X,
   Users,
-  SignOut
+  SignOut,
+  SortAscending,
+  SortDescending,
+  LinkSimple
 } from '@phosphor-icons/react'
 import { EventData } from '../../../features/events/services/events.api'
+import { toast } from 'sonner'
+import { motion } from 'framer-motion'
 
 type TabType = 'all' | 'your-photos' | 'your-uploads'
 
@@ -54,6 +65,8 @@ interface EventHeaderProps {
   onDownloadSelected: () => void
   onAttendeesClick: () => void
   userUploadCount: number
+  sortOrder: 'desc' | 'asc'
+  onToggleSort: () => void
   onLeaveEvent?: () => Promise<void>
 }
 
@@ -72,6 +85,8 @@ const EventHeader = ({
   onDownloadSelected,
   onAttendeesClick,
   userUploadCount,
+  sortOrder,
+  onToggleSort,
   onLeaveEvent
 }: EventHeaderProps) => {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false)
@@ -109,7 +124,7 @@ const EventHeader = ({
           </Tooltip>
 
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl sm:text-4xl font-bold font-sirage capitalize mb-2 truncate leading-tight">
+            <h1 className="text-3xl sm:text-4xl font-bold font-sirage capitalize mb-2 truncate leading-tight">
               {event?.name || 'Loading...'}
             </h1>
 
@@ -124,39 +139,65 @@ const EventHeader = ({
               </div>
 
               {event?.user_role === 'ORGANIZER' && (
-                <Tooltip>
-                  <TooltipTrigger delay={0} asChild>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <Badge
                       variant="outline"
                       className="cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 h-7 px-2 text-xs flex items-center gap-1.5 border-neutral-200 dark:border-neutral-700"
-                      onClick={onCopyInviteCode}
                     >
                       {inviteCodeCopied ? <Check size={12} className="text-green-500" /> : <CopySimpleIcon size={12} />}
                       <span className="font-mono">{event?.invite_code}</span>
                     </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Copy Invite Code</p>
-                  </TooltipContent>
-                </Tooltip>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-40 rounded-2xl">
+                    <DropdownMenuItem onClick={onCopyInviteCode} className="cursor-pointer py-2">
+                      <CopySimpleIcon size={16} className="mr-2" />
+                      Copy Code
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={async () => {
+                        const url = `${window.location.origin}/events?joinCode=${event?.invite_code}`
+                        try {
+                          await navigator.clipboard.writeText(url)
+                          toast.success('Invite link copied!')
+                        } catch (err) {
+                          toast.error('Failed to copy invite link')
+                        }
+                      }} className="cursor-pointer py-2">
+                      <LinkSimple size={16} className="mr-2" />
+                      Copy Link
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
 
             <div className="mt-5 -mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto no-scrollbar">
               <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as TabType)} className="w-full">
-                <TabsList className="bg-neutral-100 dark:bg-neutral-800 w-full sm:w-auto flex rounded-full">
-                  <TabsTrigger value="all" className="flex items-center gap-2 whitespace-nowrap px-3 sm:px-4 rounded-full">
-                    <Images size={16} />
-                    <span className="hidden sm:inline">All Photos</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="your-photos" className="flex items-center gap-2 whitespace-nowrap px-3 sm:px-4 rounded-full">
-                    <User size={16} />
-                    <span className="hidden sm:inline">Your Photos</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="your-uploads" className="flex items-center gap-2 whitespace-nowrap px-3 sm:px-4 rounded-full">
-                    <CloudArrowUp size={16} />
-                    <span className="hidden sm:inline">Your Uploads</span>
-                  </TabsTrigger>
+                <TabsList className="bg-neutral-100 dark:bg-neutral-800 w-full sm:w-auto flex rounded-full p-1 relative">
+                  {(['all', 'your-photos', 'your-uploads'] as TabType[]).map((tab) => {
+                    const isActive = activeTab === tab;
+                    return (
+                      <TabsTrigger
+                        key={tab}
+                        value={tab}
+                        className={`relative flex items-center gap-2 whitespace-nowrap px-3 sm:px-4 py-2 rounded-full z-10 transition-colors ${isActive ? 'text-neutral-900 dark:text-neutral-100 data-active:bg-transparent dark:data-active:bg-transparent shadow-none data-active:shadow-none' : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300'}`}
+                      >
+                        {isActive && (
+                          <motion.div
+                            layoutId="tab-indicator"
+                            className="absolute inset-0 bg-white dark:bg-neutral-900 rounded-full shadow-sm -z-10"
+                            transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                          />
+                        )}
+                        {tab === 'all' && <Images size={16} className="z-10" />}
+                        {tab === 'your-photos' && <User size={16} className="z-10" />}
+                        {tab === 'your-uploads' && <CloudArrowUp size={16} className="z-10" />}
+                        <span className="hidden sm:inline z-10">
+                          {tab === 'all' ? 'All Photos' : tab === 'your-photos' ? 'Your Photos' : 'Your Uploads'}
+                        </span>
+                      </TabsTrigger>
+                    )
+                  })}
                 </TabsList>
               </Tabs>
             </div>
@@ -168,6 +209,20 @@ const EventHeader = ({
           {!isSelectMode ? (
             <>
               <div className="flex items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-10 w-10 sm:w-auto sm:px-4 flex items-center justify-center gap-2 rounded-xl"
+                      onClick={onToggleSort}
+                    >
+                      {sortOrder === 'desc' ? <SortDescending size={18} weight="bold" /> : <SortAscending size={18} weight="bold" />}
+                      <span className="hidden sm:inline">Sort</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="sm:hidden">Sort Photos</TooltipContent>
+                </Tooltip>
+
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

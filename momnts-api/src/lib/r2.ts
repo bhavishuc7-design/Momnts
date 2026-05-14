@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { NodeHttpHandler } from '@smithy/node-http-handler'
 
 // Validate required environment variables at startup
 const requiredEnvVars = {
@@ -31,6 +32,12 @@ export const r2 = new S3Client({
     accessKeyId: requiredEnvVars.R2_ACCESS_KEY_ID!,
     secretAccessKey: requiredEnvVars.R2_SECRET_ACCESS_KEY!,
   },
+  requestHandler: new NodeHttpHandler({
+    connectionTimeout: 5000,
+    socketTimeout: 30000,
+    maxSockets: 25,
+    maxConcurrentStreams: 25,
+  }),
 })
 
 /**
@@ -43,7 +50,8 @@ export const r2 = new S3Client({
 export async function uploadToR2(
   key: string,
   body: Buffer,
-  contentType: string
+  contentType: string,
+  options?: { cacheControl?: string, contentDisposition?: string }
 ): Promise<string> {
   // PutObjectCommand is the S3/R2 way of saying "upload this file"
   await r2.send(new PutObjectCommand({
@@ -51,6 +59,8 @@ export async function uploadToR2(
     Key: key,                             // path inside the bucket
     Body: body,                           // the actual file bytes
     ContentType: contentType,             // tells browser how to handle the file
+    CacheControl: options?.cacheControl,
+    ContentDisposition: options?.contentDisposition,
   }))
 
   // R2_PUBLIC_URL is your r2.dev or custom domain URL

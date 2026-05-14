@@ -18,39 +18,39 @@ interface ProcessedPhoto {
 export async function processImage(input: Buffer | string): Promise<ProcessedPhoto> {
   // Create a sharp instance from the raw uploaded bytes or file path
   // We reuse the same input for all 3 versions
-  const image = sharp(input).rotate()
+  const pipeline = sharp(input, {
+    failOn: 'none',
+    sequentialRead: true,
+  }).rotate().withMetadata(false)
 
   // Get original dimensions before processing
-  const metadata = await image.clone().metadata()
+  const metadata = await pipeline.clone().metadata()
   const width = metadata.width || 0
   const height = metadata.height || 0
 
-  // thumb — small square crop, heavily compressed
-  // Used in photo grid where many images load at once
-  const thumb = await image
-    .clone() // clone so we can process the same image multiple times
-    .jpeg({ quality: 70 }) // 70% quality — good enough for thumbnails
-    .toBuffer()
+  const [thumb, display, original] = await Promise.all([
+    // thumb — small square crop, heavily compressed
+    pipeline
+      .clone() // clone so we can process the same image multiple times
+      .webp({ quality: 70, effort: 3 })
+      .toBuffer(),
 
-  // display — max 2400px wide, good quality
-  // Used when attendee taps on a photo to view it
-  const display = await image
-    .clone()
-    .resize(2400, 2400, {
-      fit: 'inside',            // preserve aspect ratio, don't crop
-      withoutEnlargement: true, // don't upscale small images
-    })
-    .jpeg({ quality: 82, progressive: true })
-    // progressive: true means the image loads gradually (blurry → sharp)
-    // instead of top-to-bottom, which feels faster to the user
-    .toBuffer()
+    // display — max 2400px wide, good quality
+    pipeline
+      .clone()
+      .resize(2400, 2400, {
+        fit: 'inside',            // preserve aspect ratio, don't crop
+        withoutEnlargement: true, // don't upscale small images
+      })
+      .webp({ quality: 82, effort: 4 })
+      .toBuffer(),
 
-  // original — lossless WebP, closest to the uploaded file
-  // Used only when user explicitly downloads the photo
-  const original = await image
-    .clone()
-    .webp({ lossless: true }) // lossless = no quality loss, just better compression
-    .toBuffer()
+    // original — lossless WebP, closest to the uploaded file
+    pipeline
+      .clone()
+      .webp({ lossless: true }) // lossless = no quality loss, just better compression
+      .toBuffer()
+  ])
 
   return { thumb, display, original, width, height }
 }
