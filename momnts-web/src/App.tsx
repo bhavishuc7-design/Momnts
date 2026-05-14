@@ -2,12 +2,12 @@ import { RouterProvider } from "react-router";
 import { Toaster } from "sonner";
 import { router } from "./app.routes";
 
-const App = () =>{
+const App = () => {
   return (
-   <>
-     <RouterProvider router={router}/>
-     <Toaster richColors />
-   </>
+    <>
+      <RouterProvider router={router} />
+      <Toaster richColors />
+    </>
   )
 }
 

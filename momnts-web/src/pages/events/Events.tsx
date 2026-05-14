@@ -66,7 +66,7 @@ const Events = () => {
   }, [])
 
   const filteredEvents = events
-    .filter(event => 
+    .filter(event =>
       event.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
     .filter(event => {
@@ -78,7 +78,7 @@ const Events = () => {
       const eventDate = new Date(event.date)
       const fromDate = dateRange.from ? new Date(dateRange.from) : null
       const toDate = dateRange.to ? new Date(dateRange.to) : null
-      
+
       if (fromDate && eventDate < fromDate) return false
       if (toDate && eventDate > toDate) return false
       return true
@@ -165,7 +165,7 @@ const Events = () => {
           <PopoverTrigger>
             <Button variant="outline" size="sm" className="flex items-center gap-2 cursor-pointer">
               <CalendarIcon size={16} weight="bold" />
-              {dateRange.from && dateRange.to 
+              {dateRange.from && dateRange.to
                 ? `${format(dateRange.from, 'MMM dd')} - ${format(dateRange.to, 'MMM dd')}`
                 : 'Filter by Date'
               }

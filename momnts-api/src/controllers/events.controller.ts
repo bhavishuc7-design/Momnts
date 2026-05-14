@@ -211,13 +211,19 @@ async function joinEventController(req: AuthRequest, res: Response) {
         // Enqueue face-matching job if user has a selfie
         const users = await prisma.$queryRaw<any[]>`
             SELECT id FROM "User" 
-            WHERE id = ${req.user.id} AND selfie_embedding IS NOT NULL
+            WHERE id = ${req.user.id}::text AND selfie_embedding IS NOT NULL
         `
         if (users.length > 0) {
-            await matchingQueue.add('match-user', {
-                userId: req.user.id,
-                eventId: event.id,
-            })
+            await matchingQueue.add(
+                'match-user',
+                {
+                    userId: req.user.id,
+                    eventId: event.id,
+                },
+                {
+                    jobId: `match-${event.id}-${req.user.id}`,
+                }
+            )
         }
 
         return res.status(201).json({

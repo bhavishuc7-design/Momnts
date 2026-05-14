@@ -49,7 +49,7 @@ const matchWorker = new Worker(
       // 1. Fetch the user's selfie_embedding
       const users = await prisma.$queryRaw<any[]>`
         SELECT selfie_embedding::text as embedding_text
-        FROM "User" WHERE id = ${userId}
+        FROM "User" WHERE id = ${userId}::text
       `
 
       if (!users.length || !users[0].embedding_text) {
@@ -72,14 +72,14 @@ const matchWorker = new Worker(
         ? await prisma.$queryRaw<any[]>`
             SELECT id, embedding_vector::text as embedding_text
             FROM "FaceProfile"
-            WHERE event_id = ${eventId}
+            WHERE event_id = ${eventId}::text
               AND is_claimed = false
               AND created_at > ${new Date(matchOnlyAfter)}
           `
         : await prisma.$queryRaw<any[]>`
             SELECT id, embedding_vector::text as embedding_text
             FROM "FaceProfile"
-            WHERE event_id = ${eventId} AND is_claimed = false
+            WHERE event_id = ${eventId}::text AND is_claimed = false
           `
 
       if (!profiles.length) {

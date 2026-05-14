@@ -63,7 +63,7 @@ const worker = new Worker(
         }>>`
           SELECT id, embedding_vector <=> ${vectorString}::vector AS distance
           FROM "FaceProfile"
-          WHERE event_id = ${eventId}
+          WHERE event_id = ${eventId}::text
           ORDER BY distance ASC
           LIMIT 1
         `
@@ -96,22 +96,7 @@ const worker = new Worker(
           faceProfileId = newProfileId
           console.log(`  New face profile created: ${faceProfileId}`)
 
-          // ── Step 2b: Trigger matching for all users with selfies in this event ──
-          // This handles the case where users joined before photos were uploaded
-          const usersWithSelfies = await prisma.$queryRaw<any[]>`
-            SELECT DISTINCT ea.user_id
-            FROM "EventAccess" ea
-            INNER JOIN "User" u ON u.id = ea.user_id
-            WHERE ea.event_id = ${eventId} AND u.selfie_embedding IS NOT NULL
-          `
 
-          for (const user of usersWithSelfies) {
-            await matchingQueue.add('match-user', {
-              userId: user.user_id,
-              eventId: eventId,
-            })
-            console.log(`  Enqueued matching job for user ${user.user_id}`)
-          }
         }
 
         // ── Step 3: Create PHOTO_FACE row ──
@@ -161,14 +146,20 @@ const worker = new Worker(
         SELECT DISTINCT ea.user_id
         FROM "EventAccess" ea
         INNER JOIN "User" u ON u.id = ea.user_id
-        WHERE ea.event_id = ${eventId} AND u.selfie_embedding IS NOT NULL
+        WHERE ea.event_id = ${eventId}::text AND u.selfie_embedding IS NOT NULL
       `
 
       for (const user of usersWithSelfies) {
-        await matchingQueue.add('match-user', {
-          userId: user.user_id,
-          eventId: eventId,
-        })
+        await matchingQueue.add(
+          'match-user',
+          {
+            userId: user.user_id,
+            eventId: eventId,
+          },
+          {
+            jobId: `match-${eventId}-${user.user_id}`,
+          }
+        )
         console.log(`  Enqueued matching job for user ${user.user_id}`)
       }
 
