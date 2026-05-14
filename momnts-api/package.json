@@ -7,7 +7,7 @@
     "dev": "bun --watch index.ts",
     "worker:photos": "bun --watch src/workers/photo.worker.ts",
     "worker:matching": "bun --watch src/workers/match.worker.ts",
-    "workers": "concurrently \"npm run worker:photos\" \"npm run worker:matching\"",
+    "server": "concurrently \"bun --watch index.ts\" \"bun run worker:photos\" \"bun run worker:matching\"",
     "build": "tsc",
     "start": "bun dist/server.js"
   },

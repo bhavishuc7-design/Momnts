@@ -7,10 +7,10 @@ import { CreateEventModal, JoinEventModal } from '../events/components'
 import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
 import { useQueryClient } from '@tanstack/react-query'
-import { 
-  CameraPlus, 
-  PlusCircle, 
-  Ticket, 
+import {
+  CameraPlus,
+  PlusCircle,
+  Ticket,
   X
 } from '@phosphor-icons/react'
 
@@ -19,7 +19,7 @@ const Home = () => {
   const { user } = useAuth()
   const { events, isLoading } = useEvents()
   const queryClient = useQueryClient()
-  
+
   const [showSelfieBanner, setShowSelfieBanner] = useState(true)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [joinModalOpen, setJoinModalOpen] = useState(false)
@@ -51,15 +51,15 @@ const Home = () => {
           Create your first event or join one with an invite code.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-          <Button 
+          <Button
             className="rounded-full h-12 px-8 bg-neutral-900 dark:bg-neutral-100 dark:text-neutral-900"
             onClick={() => setCreateModalOpen(true)}
           >
             <PlusCircle size={20} weight="bold" className="mr-2" />
             Create Event
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="rounded-full h-12 px-8 border-neutral-200 dark:border-neutral-700"
             onClick={() => setJoinModalOpen(true)}
           >
@@ -68,14 +68,14 @@ const Home = () => {
           </Button>
         </div>
 
-        <CreateEventModal 
-          open={createModalOpen} 
-          onOpenChange={setCreateModalOpen} 
+        <CreateEventModal
+          open={createModalOpen}
+          onOpenChange={setCreateModalOpen}
           onEventCreated={handleEventsUpdate}
         />
-        <JoinEventModal 
-          open={joinModalOpen} 
-          onOpenChange={setJoinModalOpen} 
+        <JoinEventModal
+          open={joinModalOpen}
+          onOpenChange={setJoinModalOpen}
           onEventJoined={handleEventsUpdate}
         />
       </div>
@@ -105,15 +105,15 @@ const Home = () => {
             <p className="text-sm text-amber-800/80 dark:text-amber-200/80 max-w-lg">
               Upload a selfie so Momnts can find you in event photos.
             </p>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               className="mt-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg"
               onClick={() => navigate('/onboarding')}
             >
               Upload Selfie
             </Button>
           </div>
-          <button 
+          <button
             onClick={() => setShowSelfieBanner(false)}
             className="text-amber-900/50 dark:text-amber-100/50 hover:text-amber-900 dark:hover:text-amber-100"
           >
@@ -124,15 +124,15 @@ const Home = () => {
 
       {/* 3. Quick actions */}
       <div className="flex flex-col sm:flex-row gap-4">
-        <Button 
+        <Button
           className="rounded-full h-11 px-8 bg-neutral-900 dark:bg-neutral-100 dark:text-neutral-900 font-medium"
           onClick={() => setCreateModalOpen(true)}
         >
           <PlusCircle size={20} weight="bold" className="mr-2" />
           Create Event
         </Button>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="rounded-full h-11 px-8 border-neutral-200 dark:border-neutral-700 font-medium"
           onClick={() => setJoinModalOpen(true)}
         >
@@ -195,14 +195,14 @@ const Home = () => {
         </div>
       ) : null}
 
-      <CreateEventModal 
-        open={createModalOpen} 
-        onOpenChange={setCreateModalOpen} 
+      <CreateEventModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
         onEventCreated={handleEventsUpdate}
       />
-      <JoinEventModal 
-        open={joinModalOpen} 
-        onOpenChange={setJoinModalOpen} 
+      <JoinEventModal
+        open={joinModalOpen}
+        onOpenChange={setJoinModalOpen}
         onEventJoined={handleEventsUpdate}
       />
     </div>
