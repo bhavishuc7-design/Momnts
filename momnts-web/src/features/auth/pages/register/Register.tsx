@@ -21,7 +21,8 @@ const Register = () => {
     useEffect(() => {
         if (user) {
             const redirect = searchParams.get('redirect')
-            navigate(redirect || "/dashboard", { replace: true })
+            const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : "/dashboard"
+            navigate(safeRedirect, { replace: true })
         }
     }, [user, navigate, searchParams])
 
@@ -69,7 +70,8 @@ const Register = () => {
             const data = await authApi.register(name, email, password)
             setUser(data.user)
             const redirect = searchParams.get('redirect')
-            navigate(redirect || "/dashboard", { replace: true })
+            const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : "/dashboard"
+            navigate(safeRedirect, { replace: true })
         } catch (error) {
             console.error("Registration error:", error)
             toast.error(error instanceof Error ? error.message : "Registration failed")

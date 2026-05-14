@@ -1,5 +1,16 @@
 import { useState } from 'react'
-import { Check } from '@phosphor-icons/react'
+import { Check, Trash, Warning } from '@phosphor-icons/react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../../../components/ui/alert-dialog"
 import { PhotoData } from '../../../features/events/services/photos.api'
 import { cn } from '../../../lib/utils'
 
@@ -8,9 +19,11 @@ interface PhotoCardProps {
   onClick: () => void
   isSelectMode?: boolean
   isSelected?: boolean
+  canDelete?: boolean
+  onDelete?: () => void
 }
 
-const PhotoCard = ({ photo, onClick, isSelectMode, isSelected }: PhotoCardProps) => {
+const PhotoCard = ({ photo, onClick, isSelectMode, isSelected, canDelete, onDelete }: PhotoCardProps) => {
   const [imageLoaded, setImageLoaded] = useState(false)
 
   return (
@@ -49,6 +62,42 @@ const PhotoCard = ({ photo, onClick, isSelectMode, isSelected }: PhotoCardProps)
 
       {/* Hover Overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        
+        {/* Delete Button (Top Right) */}
+        {canDelete && !isSelectMode && (
+          <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  className="p-2 rounded-full bg-black/50 text-white/80 hover:bg-red-500 hover:text-white backdrop-blur-sm transition-colors cursor-pointer"
+                >
+                  <Trash size={16} />
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                    <Warning size={24} weight="fill" />
+                    Delete Photo
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete this photo? This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => onDelete?.()}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
+
         <div className="absolute bottom-0 left-0 right-0 p-3">
           <p className="text-white text-sm font-medium truncate capitalize">
             {photo.user?.name || 'Unknown'}

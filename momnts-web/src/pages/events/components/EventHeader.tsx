@@ -154,10 +154,14 @@ const EventHeader = ({
                       <CopySimpleIcon size={16} className="mr-2" />
                       Copy Code
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => {
+                    <DropdownMenuItem onClick={async () => {
                         const url = `${window.location.origin}/events?joinCode=${event?.invite_code}`
-                        navigator.clipboard.writeText(url)
-                        toast.success('Invite link copied!')
+                        try {
+                          await navigator.clipboard.writeText(url)
+                          toast.success('Invite link copied!')
+                        } catch (err) {
+                          toast.error('Failed to copy invite link')
+                        }
                       }} className="cursor-pointer py-2">
                       <LinkSimple size={16} className="mr-2" />
                       Copy Link

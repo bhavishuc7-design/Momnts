@@ -17,7 +17,8 @@ const Login = () => {
     useEffect(() => {
         if (user) {
             const redirect = searchParams.get('redirect')
-            navigate(redirect || "/dashboard", { replace: true })
+            const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : "/dashboard"
+            navigate(safeRedirect, { replace: true })
         }
     }, [user, navigate, searchParams])
 
@@ -31,7 +32,8 @@ const Login = () => {
             const data = await authApi.login(email, password)
             setUser(data.user)
             const redirect = searchParams.get('redirect')
-            navigate(redirect || "/dashboard", { replace: true })
+            const safeRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : "/dashboard"
+            navigate(safeRedirect, { replace: true })
         } catch (error) {
             console.error("Login error:", error)
             toast.error(error instanceof Error ? error.message : "Login failed")

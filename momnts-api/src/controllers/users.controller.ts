@@ -32,10 +32,12 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
     const oldSelfieUrl = existingUser?.selfie_url
 
     // 2. Compress new selfie (800x800 jpeg 90)
-    const compressedSelfie = await sharp(req.file.buffer)
+    const compressedSelfie = await sharp(req.file.path)
       .resize(800, 800, { fit: 'inside' })
       .jpeg({ quality: 90 })
       .toBuffer()
+
+    await unlink(req.file.path).catch(() => { })
 
     // 3. Upload new selfie to R2
     const r2Key = `selfies/${userId}/selfie-${Date.now()}.jpg`
@@ -86,10 +88,20 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
       }
     }
 
-    // 7. Enqueue matching for all events — scan ALL unclaimed FaceProfiles to re-match
-    //    with new embedding. Already-claimed profiles are never touched (is_claimed=false filter),
-    //    so "Your Photos" history is preserved.
-    const matchOnlyAfter = undefined
+    // 7. Unclaim user's own profiles so they can be re-evaluated
+    //    with the new embedding. The match worker will re-claim ones
+    //    that still match, so "Your Photos" stays accurate.
+    try {
+      const unclaimed = await prisma.faceProfile.updateMany({
+        where: { claimed_by: userId },
+        data: { is_claimed: false, claimed_by: null },
+      })
+      console.log(`[UPDATE_SELFIE] Released ${unclaimed.count} profile(s) for re-matching`)
+    } catch (err) {
+      console.error('[UPDATE_SELFIE] Failed to unclaim profiles (non-fatal):', err)
+    }
+
+    // 8. Enqueue matching for all events to re-claim with new embedding
     try {
       const userEvents = await prisma.eventAccess.findMany({
         where: { user_id: userId },
@@ -98,10 +110,10 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
       for (const { event_id } of userEvents) {
         await matchingQueue.add(
           'match-user',
-          { userId, eventId: event_id, matchOnlyAfter },
+          { userId, eventId: event_id },
           { jobId: `match-${event_id}-${userId}-${Date.now()}` }
         )
-        console.log(`[UPDATE_SELFIE] Enqueued match job for event ${event_id} (after ${matchOnlyAfter})`)
+        console.log(`[UPDATE_SELFIE] Enqueued match job for event ${event_id}`)
       }
     } catch (queueErr) {
       console.error('[UPDATE_SELFIE] Failed to enqueue match jobs:', queueErr)

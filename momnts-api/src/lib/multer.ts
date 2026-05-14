@@ -6,9 +6,23 @@ import fs from 'fs'
 // (the format browsers use when submitting file uploads)
 // It intercepts the request, reads the file bytes, and puts them on req.files
 
-// Memory storage because files arrive as Buffer in req.file.buffer
-// and we process them directly with sharp without writing to disk
-const storage = multer.memoryStorage()
+// diskStorage writes files to temp directory to avoid OOM with large uploads
+// Files are processed by sharp, uploaded to R2, then cleaned up
+const tempDir = path.join(process.cwd(), 'temp-uploads')
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true })
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, tempDir)
+  },
+  filename: (req, file, cb) => {
+    // Use timestamp + random string to avoid collisions
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+})
 
 export const upload = multer({
   storage,

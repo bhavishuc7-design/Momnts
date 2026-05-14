@@ -16,12 +16,12 @@ interface JoinEventModalProps {
 
 export const JoinEventModal = ({ open, onOpenChange, onEventJoined, initialInviteCode = '' }: JoinEventModalProps) => {
   const navigate = useNavigate()
-  const [inviteCode, setInviteCode] = useState(initialInviteCode)
+  const [inviteCode, setInviteCode] = useState(initialInviteCode.toUpperCase())
   const [joiningEvent, setJoiningEvent] = useState(false)
 
   useEffect(() => {
     if (open && initialInviteCode) {
-      setInviteCode(initialInviteCode)
+      setInviteCode(initialInviteCode.toUpperCase())
     }
   }, [open, initialInviteCode])
 

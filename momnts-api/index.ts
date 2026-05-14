@@ -4,10 +4,11 @@ import cors from "cors"
 import cookieParser from "cookie-parser"
 import { createServer } from "http"
 import sharp from "sharp"
+import os from "os"
 
 // Configure sharp for maximum performance
 sharp.cache(false)
-sharp.concurrency(1)
+sharp.concurrency(Math.max(1, os.cpus().length - 1))
 sharp.simd(true)
 
 import { authRouter } from "./src/routes/auth.routes.js";

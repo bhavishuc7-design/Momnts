@@ -158,7 +158,8 @@ const EventDetails = () => {
     fetchPhotosForTab(activeTab)
   }, [activeTab, fetchPhotosForTab])
 
-  const filteredPhotos = [...(activeTab === 'your-photos' ? myPhotos : photos.filter((photo) => {
+  const sourcePhotos = activeTab === 'your-photos' ? myPhotos : photos
+  const filteredPhotos = [...sourcePhotos.filter((photo) => {
     if (selectedAttendeeId) {
       if (photo.user_id !== selectedAttendeeId && photo.user?.id !== selectedAttendeeId) {
         return false
@@ -167,11 +168,12 @@ const EventDetails = () => {
     switch (activeTab) {
       case 'your-uploads':
         return photo.user_id === user?.id || photo.user?.id === user?.id
+      case 'your-photos':
       case 'all':
       default:
         return true
     }
-  }))].sort((a, b) => {
+  })].sort((a, b) => {
     const timeA = new Date(a.uploaded_at).getTime()
     const timeB = new Date(b.uploaded_at).getTime()
     return sortOrder === 'desc' ? timeB - timeA : timeA - timeB
@@ -192,7 +194,12 @@ const EventDetails = () => {
       const limit = event.attendee_upload_limit
       const currentCount = photos.filter(p => p.user_id === user?.id).length
       if (currentCount + selectedFiles.length > limit) {
-        toast.error(`Max upload limit is ${limit} photo(s)`)
+        const remaining = Math.max(0, limit - currentCount)
+        if (remaining === 0) {
+          toast.error(`Event upload quota reached. Max ${limit} photos per event.`)
+        } else {
+          toast.error(`You can only upload ${remaining} more photo(s).`)
+        }
         return
       }
     }
@@ -324,6 +331,8 @@ const EventDetails = () => {
     const photosToDownload = photos.filter(p => selectedPhotoIds.has(p.id))
 
     const toastId = toast.loading(`Preparing to download ${photosToDownload.length} photo(s)...`)
+    let successCount = 0
+    let failCount = 0
 
     for (let i = 0; i < photosToDownload.length; i++) {
       const photo = photosToDownload[i]
@@ -356,15 +365,24 @@ const EventDetails = () => {
 
         // Delay to prevent browser blocking
         await new Promise(resolve => setTimeout(resolve, 500))
+        successCount++
       } catch (error) {
         console.error(`Failed to download photo ${photo.id}:`, error)
         toast.error(`Failed to download photo ${i + 1}`)
+        failCount++
         // Restore loading toast
         toast.loading(`Downloading ${i + 1}/${photosToDownload.length} photo(s)...`, { id: toastId })
       }
     }
 
-    toast.success('All downloads completed!', { id: toastId })
+    if (failCount === 0) {
+      toast.success('All downloads completed!', { id: toastId })
+    } else if (successCount > 0) {
+      toast.warning(`Downloaded ${successCount} photos, ${failCount} failed.`, { id: toastId })
+    } else {
+      toast.error('All downloads failed.', { id: toastId })
+    }
+
     setIsSelectMode(false)
     setSelectedPhotoIds(new Set())
   }
