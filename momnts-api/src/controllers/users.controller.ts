@@ -32,16 +32,14 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
     const oldSelfieUrl = existingUser?.selfie_url
 
     // 2. Compress new selfie (800x800 jpeg 90)
-    const compressedSelfie = await sharp(req.file.path)
+    const compressedSelfie = await sharp(req.file.buffer)
       .resize(800, 800, { fit: 'inside' })
       .jpeg({ quality: 90 })
       .toBuffer()
 
-    await unlink(req.file.path).catch(() => { })
-
     // 3. Upload new selfie to R2
     const r2Key = `selfies/${userId}/selfie-${Date.now()}.jpg`
-    const selfieUrl = await uploadToR2(r2Key, compressedSelfie, 'image/jpeg')
+    const selfieUrl = await uploadToR2(r2Key, compressedSelfie, 'image/jpeg', { cacheControl: 'public, max-age=3600' })
 
     // 4. Validate face with Python /embed.
     //    If this fails, delete the new upload and leave old selfie untouched.
@@ -101,7 +99,7 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
         await matchingQueue.add(
           'match-user',
           { userId, eventId: event_id, matchOnlyAfter },
-          { jobId: `match-${event_id}-${userId}` }
+          { jobId: `match-${event_id}-${userId}-${Date.now()}` }
         )
         console.log(`[UPDATE_SELFIE] Enqueued match job for event ${event_id} (after ${matchOnlyAfter})`)
       }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { Button } from '../../../components/ui/button'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '../../../components/ui/input-otp'
@@ -11,12 +11,19 @@ interface JoinEventModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onEventJoined: (events: EventData[]) => void
+  initialInviteCode?: string
 }
 
-export const JoinEventModal = ({ open, onOpenChange, onEventJoined }: JoinEventModalProps) => {
+export const JoinEventModal = ({ open, onOpenChange, onEventJoined, initialInviteCode = '' }: JoinEventModalProps) => {
   const navigate = useNavigate()
-  const [inviteCode, setInviteCode] = useState('')
+  const [inviteCode, setInviteCode] = useState(initialInviteCode)
   const [joiningEvent, setJoiningEvent] = useState(false)
+
+  useEffect(() => {
+    if (open && initialInviteCode) {
+      setInviteCode(initialInviteCode)
+    }
+  }, [open, initialInviteCode])
 
   const handleJoinEvent = async () => {
     if (!inviteCode || inviteCode.length !== 6) {

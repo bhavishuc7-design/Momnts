@@ -157,7 +157,7 @@ const worker = new Worker(
             eventId: eventId,
           },
           {
-            jobId: `match-${eventId}-${user.user_id}`,
+            jobId: `match-${eventId}-${user.user_id}-${Date.now()}`,
           }
         )
         console.log(`  Enqueued matching job for user ${user.user_id}`)

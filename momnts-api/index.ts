@@ -3,6 +3,13 @@ import type {Request, Response} from "express";
 import cors from "cors"
 import cookieParser from "cookie-parser"
 import { createServer } from "http"
+import sharp from "sharp"
+
+// Configure sharp for maximum performance
+sharp.cache(false)
+sharp.concurrency(1)
+sharp.simd(true)
+
 import { authRouter } from "./src/routes/auth.routes.js";
 import { eventsRouter } from "./src/routes/events.routes.js";
 import { photosRouter } from "./src/routes/photos.routes.js";

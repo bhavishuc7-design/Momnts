@@ -1,4 +1,4 @@
-import { Form, Link, useNavigate } from "react-router"
+import { Form, Link, useNavigate, useSearchParams } from "react-router"
 import { Field, FieldGroup, FieldLabel, FieldSet } from "../../../../components/ui/field"
 import { Input } from "../../../../components/ui/input"
 import { Button } from "../../../../components/ui/button"
@@ -10,6 +10,7 @@ import { toast } from "sonner"
 
 const Register = () => {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const { user, setUser } = useAuth()
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -19,9 +20,10 @@ const Register = () => {
 
     useEffect(() => {
         if (user) {
-            navigate("/dashboard", { replace: true })
+            const redirect = searchParams.get('redirect')
+            navigate(redirect || "/dashboard", { replace: true })
         }
-    }, [user, navigate])
+    }, [user, navigate, searchParams])
 
     useEffect(() => {
         if (!confirmPassword) {
@@ -66,7 +68,8 @@ const Register = () => {
         try {
             const data = await authApi.register(name, email, password)
             setUser(data.user)
-            navigate("/dashboard", { replace: true })
+            const redirect = searchParams.get('redirect')
+            navigate(redirect || "/dashboard", { replace: true })
         } catch (error) {
             console.error("Registration error:", error)
             toast.error(error instanceof Error ? error.message : "Registration failed")
@@ -125,7 +128,7 @@ const Register = () => {
                                 <Button type="submit" className="w-full cursor-pointer">Get Started</Button>
                             </Field>
                         </FieldSet>
-                        <span className="select-none">Already have an account? <Link to="/login" className="underline">Login</Link></span>
+                        <span className="select-none">Already have an account? <Link to={`/login${searchParams.get('redirect') ? `?redirect=${encodeURIComponent(searchParams.get('redirect')!)}` : ''}`} className="underline">Login</Link></span>
                     </FieldGroup>
                 </Form>
             </div>

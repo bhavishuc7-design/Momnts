@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useAuth } from '../../features/auth/hooks/useAuth'
 import { Button } from '../../components/ui/button'
-import { ArrowLeft } from '@phosphor-icons/react'
+import { Badge } from '../../components/ui/badge'
+import { ArrowLeft, X } from '@phosphor-icons/react'
 import { eventsApi, EventData } from '../../features/events/services/events.api'
 import { photosApi, PhotoData } from '../../features/events/services/photos.api'
 import { toast } from 'sonner'
@@ -47,6 +48,8 @@ const EventDetails = () => {
   const [attendees, setAttendees] = useState<any[]>([])
   const [attendeesLoading, setAttendeesLoading] = useState(false)
   const [fileStatuses, setFileStatuses] = useState<FileUploadStatus[]>([])
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
+  const [selectedAttendeeId, setSelectedAttendeeId] = useState<string | null>(null)
 
   // ── Real-time WebSocket updates ──
   useEventSocket({
@@ -155,7 +158,12 @@ const EventDetails = () => {
     fetchPhotosForTab(activeTab)
   }, [activeTab, fetchPhotosForTab])
 
-  const filteredPhotos = activeTab === 'your-photos' ? myPhotos : photos.filter((photo) => {
+  const filteredPhotos = [...(activeTab === 'your-photos' ? myPhotos : photos.filter((photo) => {
+    if (selectedAttendeeId) {
+      if (photo.user_id !== selectedAttendeeId && photo.user?.id !== selectedAttendeeId) {
+        return false
+      }
+    }
     switch (activeTab) {
       case 'your-uploads':
         return photo.user_id === user?.id || photo.user?.id === user?.id
@@ -163,6 +171,10 @@ const EventDetails = () => {
       default:
         return true
     }
+  }))].sort((a, b) => {
+    const timeA = new Date(a.uploaded_at).getTime()
+    const timeB = new Date(b.uploaded_at).getTime()
+    return sortOrder === 'desc' ? timeB - timeA : timeA - timeB
   })
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -311,7 +323,7 @@ const EventDetails = () => {
 
     const photosToDownload = photos.filter(p => selectedPhotoIds.has(p.id))
 
-    toast.info(`Downloading ${photosToDownload.length} photo(s)...`)
+    const toastId = toast.loading(`Preparing to download ${photosToDownload.length} photo(s)...`)
 
     for (let i = 0; i < photosToDownload.length; i++) {
       const photo = photosToDownload[i]
@@ -339,20 +351,20 @@ const EventDetails = () => {
           document.body.removeChild(a)
         }, 100)
 
-        // Progress update if many photos
-        if (photosToDownload.length > 5 && (i + 1) % 5 === 0) {
-          toast.info(`Downloaded ${i + 1}/${photosToDownload.length}...`)
-        }
+        // Progress update
+        toast.loading(`Downloading ${i + 1}/${photosToDownload.length} photo(s)...`, { id: toastId })
 
         // Delay to prevent browser blocking
         await new Promise(resolve => setTimeout(resolve, 500))
       } catch (error) {
         console.error(`Failed to download photo ${photo.id}:`, error)
         toast.error(`Failed to download photo ${i + 1}`)
+        // Restore loading toast
+        toast.loading(`Downloading ${i + 1}/${photosToDownload.length} photo(s)...`, { id: toastId })
       }
     }
 
-    toast.success('All downloads initiated!')
+    toast.success('All downloads completed!', { id: toastId })
     setIsSelectMode(false)
     setSelectedPhotoIds(new Set())
   }
@@ -393,6 +405,8 @@ const EventDetails = () => {
           fetchAttendees()
         }}
         userUploadCount={photos.filter(p => p.user_id === user?.id || p.user?.id === user?.id).length}
+        sortOrder={sortOrder}
+        onToggleSort={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
         onLeaveEvent={async () => {
           if (!eventId) return
           try {
@@ -406,6 +420,24 @@ const EventDetails = () => {
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {selectedAttendeeId && (
+          <div className="mb-4 flex items-center">
+            <Badge variant="secondary" className="flex items-center gap-2 w-fit py-3 px-3 bg-neutral-200 dark:bg-neutral-800 text-sm">
+              Viewing <span className="capitalize font-semibold">{attendees.find(a => a.user_id === selectedAttendeeId)?.user?.name || 'attendee'}</span> uploads
+              <button
+                type="button"
+                className="hover:text-red-500 flex items-center justify-center p-0.5 rounded-full hover:bg-neutral-300 dark:hover:bg-neutral-700 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedAttendeeId(null);
+                }}
+              >
+                <X size={14} className="cursor-pointer" />
+              </button>
+            </Badge>
+          </div>
+        )}
         <PhotoGrid
           photos={filteredPhotos}
           loading={loading}
@@ -440,6 +472,12 @@ const EventDetails = () => {
         onOpenChange={setAttendeesModalOpen}
         attendees={attendees}
         loading={attendeesLoading}
+        onSelectAttendee={(attendeeId) => {
+          setSelectedAttendeeId(attendeeId)
+          setAttendeesModalOpen(false)
+          setActiveTab('all')
+        }}
+        isOrganizer={event?.user_role === 'ORGANIZER'}
       />
 
       <EventSettingsModal

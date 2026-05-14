@@ -24,6 +24,7 @@ const Events = () => {
   // Modal States
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [joinModalOpen, setJoinModalOpen] = useState(false)
+  const [initialJoinCode, setInitialJoinCode] = useState('')
 
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -39,6 +40,18 @@ const Events = () => {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('joinCode')
+    if (code) {
+      setInitialJoinCode(code)
+      setJoinModalOpen(true)
+      
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
   }, [])
 
   useEffect(() => {
@@ -143,7 +156,7 @@ const Events = () => {
               placeholder="Search events by name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-10 pr-12 w-[90vw] md:w-full"
+              className="px-10 pr-12 w-[90vw] md:w-full rounded-full"
             />
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex h-5 items-center rounded border border-neutral-200 bg-neutral-100 px-1.5 font-mono text-[11px] font-medium text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400">
               /
@@ -281,6 +294,7 @@ const Events = () => {
         open={joinModalOpen}
         onOpenChange={setJoinModalOpen}
         onEventJoined={handleEventsUpdate}
+        initialInviteCode={initialJoinCode}
       />
     </div>
   )

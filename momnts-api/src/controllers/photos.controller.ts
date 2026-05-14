@@ -101,100 +101,61 @@ export async function uploadPhotoController(req: AuthRequest, res: Response) {
         // Validate each file is a valid image using sharp (not just client-controlled mimetype)
         for (const file of files) {
             try {
-                await sharp(file.path).metadata()
+                await sharp(file.buffer).metadata()
             } catch (error) {
-                // Clean up invalid file
-                try {
-                    if (fs.existsSync(file.path)) {
-                        fs.unlinkSync(file.path)
-                    }
-                } catch (cleanupError) {
-                    console.error(`Failed to delete invalid file ${file.path}:`, cleanupError)
-                }
                 return res.status(400).json({
                     message: `Invalid image file: ${file.originalname}. Only JPEG, PNG, WebP and HEIC images are allowed.`,
                 })
             }
         }
 
-        // Process and upload files in parallel with concurrency limit
-        const uploadedPhotos = []
-        const processedFiles: string[] = []
-        const CONCURRENCY = 5 // Process 5 photos simultaneously
+        // Process and upload files in parallel
+        const results = await Promise.all(
+            files.map(async (file) => {
+                const photoId = crypto.randomUUID()
+                const basePath = `events/${eventId}/${photoId}`
 
-        // Helper to process a single file
-        const processSingleFile = async (file: Express.Multer.File) => {
-            const photoId = crypto.randomUUID()
-            const basePath = `events/${eventId}/${photoId}`
+                // Compress image into 3 versions
+                const { thumb, display, original, width, height } = await processImage(file.buffer)
 
-            // Compress image into 3 versions
-            const { thumb, display, original, width, height } = await processImage(file.path)
+                // Upload all 3 versions to R2 in parallel
+                const [thumbUrl, displayUrl, originalUrl] = await Promise.all([
+                    uploadToR2(`${basePath}/thumb.webp`, thumb, 'image/webp', { cacheControl: 'public, max-age=31536000, immutable' }),
+                    uploadToR2(`${basePath}/display.webp`, display, 'image/webp', { cacheControl: 'public, max-age=31536000, immutable' }),
+                    uploadToR2(`${basePath}/original.webp`, original, 'image/webp', { cacheControl: 'public, max-age=31536000, immutable', contentDisposition: `attachment; filename="${photoId}-original.webp"` }),
+                ])
 
-            // Upload all 3 versions to R2 in parallel
-            const [thumbUrl, displayUrl, originalUrl] = await Promise.all([
-                uploadToR2(`${basePath}/thumb.jpg`, thumb, 'image/jpeg'),
-                uploadToR2(`${basePath}/display.jpg`, display, 'image/jpeg'),
-                uploadToR2(`${basePath}/original.webp`, original, 'image/webp'),
-            ])
-
-            // Save photo record to database
-            const photo = await prisma.photo.create({
-                data: {
-                    id: photoId,
-                    event_id: eventId,
-                    user_id: req.user.id,
-                    thumb_url: thumbUrl,
-                    display_url: displayUrl,
-                    original_url: originalUrl,
-                    width: width || null,
-                    height: height || null,
-                    processed: false,
-                    is_visible: true,
-                }
+                return { photoId, thumbUrl, displayUrl, originalUrl, width, height }
             })
+        )
 
-            // Add job to queue for face detection
-            await photoQueue.add('detect-faces', {
-                photoId: photo.id,
-                eventId: eventId,
-                displayUrl: displayUrl,
-            })
-
-            return { photo, filePath: file.path }
-        }
-
-        // Process files with concurrency limit
-        const processWithConcurrency = async (files: Express.Multer.File[]) => {
-            const results = []
-            for (let i = 0; i < files.length; i += CONCURRENCY) {
-                const batch = files.slice(i, i + CONCURRENCY)
-                const batchResults = await Promise.all(
-                    batch.map(file => processSingleFile(file))
-                )
-                results.push(...batchResults)
-            }
-            return results
-        }
-
-        try {
-            const results = await processWithConcurrency(files)
-            for (const { photo, filePath } of results) {
-                uploadedPhotos.push(photo)
-                processedFiles.push(filePath)
-            }
-        } finally {
-            // Clean up temp files regardless of success or error
-            for (const filePath of processedFiles) {
-                try {
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath)
+        const uploadedPhotos = await Promise.all(
+            results.map(async ({ photoId, thumbUrl, displayUrl, originalUrl, width, height }) => {
+                const photo = await prisma.photo.create({
+                    data: {
+                        id: photoId,
+                        event_id: eventId,
+                        user_id: req.user!.id,
+                        thumb_url: thumbUrl,
+                        display_url: displayUrl,
+                        original_url: originalUrl,
+                        width: width || null,
+                        height: height || null,
+                        processed: false,
+                        is_visible: true,
                     }
-                } catch (err) {
-                    // Log cleanup error but don't fail the request
-                    console.error(`Failed to delete temp file ${filePath}:`, err)
-                }
-            }
-        }
+                })
+
+                // Add job to queue for face detection
+                await photoQueue.add('detect-faces', {
+                    photoId: photo.id,
+                    eventId: eventId,
+                    displayUrl: displayUrl,
+                })
+
+                return photo
+            })
+        )
 
 
         // Build response — include upload count for all users

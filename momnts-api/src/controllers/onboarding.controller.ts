@@ -30,18 +30,17 @@ export async function uploadSelfieController(req: AuthRequest, res: Response) {
     const isSelfieUpdate = existingUser.length > 0
 
     // 3. Compress the selfie using sharp
-    // Since we use diskStorage, we read from path
-    const compressedSelfie = await sharp(req.file.path)
+    // Since we use memoryStorage, we read from buffer
+    const compressedSelfie = await sharp(req.file.buffer)
       .resize(800, 800, { fit: 'inside' })
       .jpeg({ quality: 90 })
       .toBuffer()
 
-    // Clean up temp file immediately after reading into buffer
-    import('fs').then(fs => fs.unlink(req.file!.path, () => { }))
-
     // 4. Upload to R2 with unique key (timestamp prevents CDN cache)
     const r2Key = `selfies/${userId}/selfie-${Date.now()}.jpg`
-    const selfieUrl = await uploadToR2(r2Key, compressedSelfie, 'image/jpeg')
+    const selfieUrl = await uploadToR2(r2Key, compressedSelfie, 'image/jpeg', {
+      cacheControl: 'public, max-age=3600'
+    })
 
     // 5. Call Python /embed
     // POST ${PYTHON_SERVICE_URL}/embed
@@ -106,7 +105,7 @@ export async function uploadSelfieController(req: AuthRequest, res: Response) {
             ...(matchOnlyAfter && { matchOnlyAfter }),
           },
           {
-            jobId: `match-${event_id}-${userId}`,
+            jobId: `match-${event_id}-${userId}-${Date.now()}`,
           }
         )
         console.log(`[ONBOARDING] Enqueued match job for user ${userId} in event ${event_id}${matchOnlyAfter ? ` (update — only photos after ${matchOnlyAfter})` : ' (first upload — all unclaimed)'

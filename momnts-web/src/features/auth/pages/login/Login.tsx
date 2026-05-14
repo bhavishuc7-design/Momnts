@@ -1,4 +1,4 @@
-import { Form, Link, useNavigate } from "react-router"
+import { Form, Link, useNavigate, useSearchParams } from "react-router"
 import { Field, FieldGroup, FieldLabel, FieldSet } from "../../../../components/ui/field"
 import { Input } from "../../../../components/ui/input"
 import { Button } from "../../../../components/ui/button"
@@ -10,14 +10,16 @@ import { toast } from "sonner"
 
 const Login = () => {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const { user, setUser } = useAuth()
     const [showPassword, setShowPassword] = useState(false)
 
     useEffect(() => {
         if (user) {
-            navigate("/dashboard", { replace: true })
+            const redirect = searchParams.get('redirect')
+            navigate(redirect || "/dashboard", { replace: true })
         }
-    }, [user, navigate])
+    }, [user, navigate, searchParams])
 
     const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
@@ -28,7 +30,8 @@ const Login = () => {
         try {
             const data = await authApi.login(email, password)
             setUser(data.user)
-            navigate("/dashboard", { replace: true })
+            const redirect = searchParams.get('redirect')
+            navigate(redirect || "/dashboard", { replace: true })
         } catch (error) {
             console.error("Login error:", error)
             toast.error(error instanceof Error ? error.message : "Login failed")
@@ -71,7 +74,7 @@ const Login = () => {
                                 <Button type="submit" className="w-full cursor-pointer">Log in</Button>
                             </Field>
                         </FieldSet>
-                        <span className="select-none">Don't have an account? <Link to="/register" className="underline">Get Started</Link></span>
+                        <span className="select-none">Don't have an account? <Link to={`/register${searchParams.get('redirect') ? `?redirect=${encodeURIComponent(searchParams.get('redirect')!)}` : ''}`} className="underline">Get Started</Link></span>
                     </FieldGroup>
                 </Form>
             </div>
