@@ -212,6 +212,10 @@ const EventDetails = () => {
       )
 
       toast.success(`${selectedFiles.length} photo(s) uploaded successfully!`)
+      
+      // Delay closing so user can see the green check marks
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
       setUploadModalOpen(false)
       setSelectedFiles([])
       setFileStatuses([])

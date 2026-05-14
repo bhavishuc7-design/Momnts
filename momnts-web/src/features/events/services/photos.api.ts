@@ -120,9 +120,15 @@ export const photosApi = {
 
         return uploadedPhotos
       } catch (error) {
-        const err = error instanceof Error ? error : new Error('Failed to upload photos')
-        if (err.name === 'AbortError') {
-          err.message = 'Upload timeout - please try with fewer photos'
+        let err: Error
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            err = new Error('Upload timeout - please try with fewer photos')
+          } else {
+            err = error
+          }
+        } else {
+          err = new Error('Failed to upload photos')
         }
         // Mark all files in batch as error
         batchFiles.forEach((_, idx) => {
