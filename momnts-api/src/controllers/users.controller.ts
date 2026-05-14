@@ -98,7 +98,11 @@ export async function updateSelfieController(req: AuthRequest, res: Response) {
         select: { event_id: true },
       })
       for (const { event_id } of userEvents) {
-        await matchingQueue.add('match-user', { userId, eventId: event_id, matchOnlyAfter })
+        await matchingQueue.add(
+          'match-user',
+          { userId, eventId: event_id, matchOnlyAfter },
+          { jobId: `match-${event_id}-${userId}` }
+        )
         console.log(`[UPDATE_SELFIE] Enqueued match job for event ${event_id} (after ${matchOnlyAfter})`)
       }
     } catch (queueErr) {

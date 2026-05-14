@@ -98,11 +98,17 @@ export async function uploadSelfieController(req: AuthRequest, res: Response) {
         select: { event_id: true },
       })
       for (const { event_id } of userEvents) {
-        await matchingQueue.add('match-user', {
-          userId,
-          eventId: event_id,
-          ...(matchOnlyAfter && { matchOnlyAfter }),
-        })
+        await matchingQueue.add(
+          'match-user',
+          {
+            userId,
+            eventId: event_id,
+            ...(matchOnlyAfter && { matchOnlyAfter }),
+          },
+          {
+            jobId: `match-${event_id}-${userId}`,
+          }
+        )
         console.log(`[ONBOARDING] Enqueued match job for user ${userId} in event ${event_id}${matchOnlyAfter ? ` (update — only photos after ${matchOnlyAfter})` : ' (first upload — all unclaimed)'
           }`)
       }
