@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router';
+import { ThemeToggle } from '../theme-toggle';
 
 const Navbar = () => {
   return (
@@ -30,9 +31,10 @@ const Navbar = () => {
         </div>
 
 
-        <div className="flex items-center justify-center gap-1">
+        <div className="flex items-center justify-center gap-3">
+          <ThemeToggle />
           <Link to="/register">
-          <button className="bg-[#1a1a1a] text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-black transition-transform hover:scale-105 active:scale-95 shadow-md cursor-pointer">
+          <button className="bg-[#1a1a1a] text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-black transition-transform hover:scale-105 active:scale-95 shadow-md cursor-pointer dark:bg-white dark:text-black">
             Get Started
           </button>
           </Link>

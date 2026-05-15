@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router';
 import { CakeIcon, HouseIcon, UserIcon, List, X } from "@phosphor-icons/react"
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../lib/utils'
+import { ThemeToggle } from '../components/theme-toggle'
 
 
 const DashboardLayout = () => {
@@ -64,13 +65,16 @@ const DashboardLayout = () => {
           }
         </div>
 
-        {/* Mobile Menu Toggle */}
-        <button
-          onClick={() => setIsMobileMenuOpen(true)}
-          className="sm:hidden p-2 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-xl transition-colors"
-        >
-          <List size={28} weight="bold" />
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          {/* Mobile Menu Toggle */}
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="sm:hidden p-2 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-xl transition-colors"
+          >
+            <List size={28} weight="bold" />
+          </button>
+        </div>
 
         {/* Mobile Slide-over Menu */}
         <AnimatePresence>
