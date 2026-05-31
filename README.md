@@ -138,12 +138,11 @@ APP_PORT=3000
 R2_ACCOUNT_ID="your_cloudflare_r2_account_id"
 R2_ACCESS_KEY_ID="your_r2_access_key"
 R2_SECRET_ACCESS_KEY="your_r2_secret_key"
-R2_BUCKET_NAME="momnts-photos"
+R2_BUCKET_NAME="bucket-name"
 R2_PUBLIC_URL="https://your-bucket-public-url.r2.dev"
 R2_ENDPOINT_URL="https://your_account_id.r2.cloudflarestorage.com"
 
 REDIS_URL="redis://localhost:6379"
-RESEND_API_KEY="your_resend_api_key"
 ```
 
 Initialize your database schema and run migrations:
